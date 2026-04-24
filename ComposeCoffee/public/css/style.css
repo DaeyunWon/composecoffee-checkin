@@ -652,16 +652,17 @@ body {
     display: flex;
   }
   .admin-sidebar {
-    display: none;
+    display: block;
     position: fixed;
     top: 0;
-    left: 0;
+    left: -280px;
     z-index: 200;
     width: 260px;
     height: 100vh;
+    transition: left 0.25s ease;
   }
   .admin-sidebar.open {
-    display: block;
+    left: 0;
   }
   .admin-main {
     margin-left: 0;
