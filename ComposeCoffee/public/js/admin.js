@@ -222,12 +222,130 @@
     });
   }
 
+  // ==================== 지도 (Leaflet + OSM) ====================
+  let branchMap = null;
+  let branchMarker = null;
+  let branchCircle = null;
+
+  function initBranchMap() {
+    if (branchMap) {
+      branchMap.invalidateSize();
+      return;
+    }
+
+    // 서울 중심으로 기본 표시
+    branchMap = L.map('branch-map').setView([37.5665, 126.9780], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+      maxZoom: 19
+    }).addTo(branchMap);
+
+    // 지도 클릭 시 좌표 입력
+    branchMap.on('click', function(e) {
+      setMapLocation(e.latlng.lat, e.latlng.lng);
+    });
+  }
+
+  function setMapLocation(lat, lng) {
+    $('#branch-lat').value = lat.toFixed(7);
+    $('#branch-lng').value = lng.toFixed(7);
+
+    if (branchMarker) {
+      branchMarker.setLatLng([lat, lng]);
+    } else {
+      branchMarker = L.marker([lat, lng], { draggable: true }).addTo(branchMap);
+      branchMarker.on('dragend', function(e) {
+        const pos = e.target.getLatLng();
+        setMapLocation(pos.lat, pos.lng);
+      });
+    }
+
+    // 반경 원 표시
+    const radius = parseInt($('#branch-radius').value) || 50;
+    if (branchCircle) {
+      branchCircle.setLatLng([lat, lng]).setRadius(radius);
+    } else {
+      branchCircle = L.circle([lat, lng], {
+        radius: radius,
+        color: '#FF8F00',
+        fillColor: '#FFB300',
+        fillOpacity: 0.2
+      }).addTo(branchMap);
+    }
+
+    branchMap.setView([lat, lng], Math.max(branchMap.getZoom(), 16));
+  }
+
+  // 반경 변경 시 원 업데이트
+  $('#branch-radius').addEventListener('input', () => {
+    if (branchCircle) {
+      branchCircle.setRadius(parseInt($('#branch-radius').value) || 50);
+    }
+  });
+
+  // 주소 검색 (Nominatim - OSM 무료 지오코딩)
+  $('#btn-search-address').addEventListener('click', searchAddress);
+  $('#branch-address').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); searchAddress(); }
+  });
+
+  async function searchAddress() {
+    const query = $('#branch-address').value.trim();
+    if (!query) { showToast('주소 또는 장소명을 입력해주세요.', 'error'); return; }
+
+    const resultsEl = $('#search-results');
+    resultsEl.innerHTML = '<div style="padding:10px;color:var(--text-light);">검색 중...</div>';
+    resultsEl.style.display = 'block';
+
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=kr&limit=5&accept-language=ko`);
+      const data = await res.json();
+
+      if (data.length === 0) {
+        resultsEl.innerHTML = '<div style="padding:10px;color:var(--danger);">검색 결과가 없습니다. 다른 키워드로 시도해보세요.</div>';
+        return;
+      }
+
+      resultsEl.innerHTML = data.map((item, i) => `
+        <div class="search-result-item" data-lat="${item.lat}" data-lng="${item.lon}" data-name="${item.display_name}"
+          style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;${i === 0 ? 'background:#FFF8E1;' : ''}"
+          onmouseover="this.style.background='#FFF8E1'" onmouseout="this.style.background='${i === 0 ? '#FFF8E1' : '#fff'}'">
+          ${item.display_name}
+        </div>
+      `).join('');
+
+      // 검색 결과 클릭 이벤트
+      resultsEl.querySelectorAll('.search-result-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const lat = parseFloat(el.dataset.lat);
+          const lng = parseFloat(el.dataset.lng);
+          $('#branch-address').value = el.dataset.name;
+          setMapLocation(lat, lng);
+          resultsEl.style.display = 'none';
+        });
+      });
+    } catch (err) {
+      resultsEl.innerHTML = '<div style="padding:10px;color:var(--danger);">검색 중 오류가 발생했습니다.</div>';
+    }
+  }
+
+  // 모달 열 때 지도 초기화
   $('#btn-add-branch').addEventListener('click', () => {
     $('#modal-branch-title').textContent = '지점 추가';
     $('#branch-edit-id').value = '';
     $('#form-branch').reset();
     $('#branch-radius').value = 50;
+    $('#search-results').style.display = 'none';
     $('#modal-branch').classList.add('active');
+
+    // 기존 마커/원 제거
+    if (branchMarker) { branchMap && branchMap.removeLayer(branchMarker); branchMarker = null; }
+    if (branchCircle) { branchMap && branchMap.removeLayer(branchCircle); branchCircle = null; }
+
+    setTimeout(() => {
+      initBranchMap();
+      branchMap.setView([37.5665, 126.9780], 13);
+    }, 200);
   });
 
   window.editBranch = async function(id) {
@@ -241,14 +359,23 @@
     $('#branch-lat').value = branch.latitude;
     $('#branch-lng').value = branch.longitude;
     $('#branch-radius').value = branch.radius_meters;
+    $('#search-results').style.display = 'none';
     $('#modal-branch').classList.add('active');
+
+    // 기존 마커/원 제거
+    if (branchMarker) { branchMap && branchMap.removeLayer(branchMarker); branchMarker = null; }
+    if (branchCircle) { branchMap && branchMap.removeLayer(branchCircle); branchCircle = null; }
+
+    setTimeout(() => {
+      initBranchMap();
+      setMapLocation(branch.latitude, branch.longitude);
+    }, 200);
   };
 
   $('#btn-get-current-location').addEventListener('click', () => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        $('#branch-lat').value = pos.coords.latitude.toFixed(7);
-        $('#branch-lng').value = pos.coords.longitude.toFixed(7);
+        setMapLocation(pos.coords.latitude, pos.coords.longitude);
         showToast('현재 위치가 입력되었습니다.', 'success');
       },
       () => showToast('위치 정보를 가져올 수 없습니다.', 'error'),

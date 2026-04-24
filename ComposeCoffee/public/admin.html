@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ComposeCoffee 관리자</title>
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 </head>
 <body>
   <div id="admin-login" class="screen active">
@@ -173,7 +175,7 @@
 
   <!-- 지점 추가/수정 모달 -->
   <div class="modal-overlay" id="modal-branch">
-    <div class="modal">
+    <div class="modal" style="max-width:600px;">
       <h3 id="modal-branch-title">지점 추가</h3>
       <form id="form-branch">
         <input type="hidden" id="branch-edit-id">
@@ -182,22 +184,35 @@
           <input type="text" id="branch-name" required placeholder="예: 강남점">
         </div>
         <div class="form-group">
-          <label>주소</label>
-          <input type="text" id="branch-address" placeholder="예: 서울시 강남구 역삼로 123">
+          <label>주소 검색</label>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="branch-address" placeholder="주소 또는 장소명 입력" style="flex:1;">
+            <button type="button" class="btn btn-outline btn-sm" id="btn-search-address">검색</button>
+          </div>
+          <div id="search-results" style="display:none;max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-top:6px;background:#fff;"></div>
         </div>
+        <!-- 지도 -->
         <div class="form-group">
-          <label>위도 *</label>
-          <input type="number" id="branch-lat" step="any" required placeholder="37.123456">
+          <label>지도에서 위치 선택 (클릭하세요)</label>
+          <div id="branch-map" style="height:280px;border-radius:8px;border:1px solid var(--border);z-index:1;"></div>
         </div>
-        <div class="form-group">
-          <label>경도 *</label>
-          <input type="number" id="branch-lng" step="any" required placeholder="127.123456">
+        <div style="display:flex;gap:12px;">
+          <div class="form-group" style="flex:1;">
+            <label>위도 *</label>
+            <input type="number" id="branch-lat" step="any" required placeholder="37.123456">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>경도 *</label>
+            <input type="number" id="branch-lng" step="any" required placeholder="127.123456">
+          </div>
         </div>
         <div class="form-group">
           <label>허용 반경 (m)</label>
           <input type="number" id="branch-radius" value="50" min="10" max="1000">
         </div>
-        <button type="button" class="btn btn-outline btn-sm" id="btn-get-current-location">📍 현재 위치 가져오기</button>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <button type="button" class="btn btn-outline btn-sm" id="btn-get-current-location">📍 현재 위치 가져오기</button>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-branch').classList.remove('active')">취소</button>
           <button type="submit" class="btn btn-primary">저장</button>
