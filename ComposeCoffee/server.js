@@ -23,6 +23,13 @@ async function startServer() {
   // 정적 파일 서빙
   app.use(express.static(path.join(__dirname, 'public')));
 
+  // 공개 API: 지점 이름 조회 (QR코드 접속 시 사용)
+  app.get('/api/branch/:id/name', (req, res) => {
+    const branch = db.prepare('SELECT id, name FROM branches WHERE id = ?').get(parseInt(req.params.id));
+    if (!branch) return res.status(404).json({ error: '지점을 찾을 수 없습니다.' });
+    res.json({ id: branch.id, name: branch.name });
+  });
+
   // API 라우트
   app.use('/api/auth', authRoutes);
   app.use('/api/attendance', attendanceRoutes);

@@ -7,6 +7,7 @@
   let currentUser = null;
   let currentPosition = null;
   let watchId = null;
+  let qrBranchId = new URLSearchParams(window.location.search).get('branch');
 
   // ==================== 유틸 ====================
   function $(sel) { return document.querySelector(sel); }
@@ -260,6 +261,11 @@
       currentUser = data.user;
       errorEl.classList.add('hidden');
 
+      // QR 지점과 소속 지점이 다르면 경고
+      if (qrBranchId && parseInt(qrBranchId) !== data.user.branch.id) {
+        showToast(`⚠️ 이 QR코드는 다른 지점용입니다. 본인 소속: ${data.user.branch.name}`, 'error');
+      }
+
       initCheckinScreen();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -402,6 +408,19 @@
     $('#modal-mypage').addEventListener('click', (e) => {
       if (e.target === $('#modal-mypage')) closeMypage();
     });
+
+    // QR코드로 접속한 경우 지점명 표시
+    if (qrBranchId) {
+      try {
+        const res = await fetch(`${API}/branch/${qrBranchId}/name`);
+        if (res.ok) {
+          const branch = await res.json();
+          const el = $('#qr-branch-name');
+          el.textContent = `📍 ${branch.name}`;
+          el.style.display = 'block';
+        }
+      } catch (e) { /* 무시 */ }
+    }
 
     // 토큰이 있으면 자동 로그인 시도
     if (token) {
