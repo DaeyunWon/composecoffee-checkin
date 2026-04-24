@@ -8,6 +8,20 @@
   let branches = [];
 
   function $(sel) { return document.querySelector(sel); }
+
+  // 모바일 사이드바 토글
+  function openSidebar() {
+    $('#admin-sidebar').classList.add('open');
+    $('#sidebar-overlay').classList.add('active');
+  }
+  function closeSidebar() {
+    $('#admin-sidebar').classList.remove('open');
+    $('#sidebar-overlay').classList.remove('active');
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    $('#btn-mobile-menu').addEventListener('click', openSidebar);
+    $('#sidebar-overlay').addEventListener('click', closeSidebar);
+  });
   function $$(sel) { return document.querySelectorAll(sel); }
 
   async function apiFetch(url, options = {}) {
@@ -94,6 +108,7 @@
       a.classList.add('active');
       $$('.admin-section').forEach(s => s.style.display = 'none');
       $(`#sec-${section}`).style.display = 'block';
+      closeSidebar();
 
       // 섹션 로드
       switch (section) {

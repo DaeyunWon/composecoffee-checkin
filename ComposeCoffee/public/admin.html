@@ -30,9 +30,16 @@
   </div>
 
   <div id="admin-app" class="screen">
-    <div class="admin-layout">
+    <div class="admin-layout" id="admin-layout">
+      <!-- 모바일 헤더 -->
+      <div class="mobile-header">
+        <button class="mobile-menu-btn" id="btn-mobile-menu">☰</button>
+        <span>☕ ComposeCoffee 관리</span>
+      </div>
+      <!-- 사이드바 오버레이 (모바일) -->
+      <div class="sidebar-overlay" id="sidebar-overlay"></div>
       <!-- 사이드바 -->
-      <aside class="admin-sidebar">
+      <aside class="admin-sidebar" id="admin-sidebar">
         <div class="logo">
           <h2>☕ ComposeCoffee</h2>
           <p>출퇴근 관리 시스템</p>

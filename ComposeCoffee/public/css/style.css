@@ -602,20 +602,70 @@ body {
   color: var(--text-light);
 }
 
+/* 모바일 헤더 (기본 숨김) */
+.mobile-header {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--primary-dark);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 150;
+}
+
+.mobile-menu-btn {
+  background: none;
+  border: 1.5px solid rgba(255,255,255,0.3);
+  color: #fff;
+  font-size: 20px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.mobile-menu-btn:hover {
+  border-color: #fff;
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 190;
+}
+
+.sidebar-overlay.active {
+  display: block;
+}
+
 /* 반응형 - 관리자 페이지 모바일 */
 @media (max-width: 768px) {
+  .mobile-header {
+    display: flex;
+  }
   .admin-sidebar {
     display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 200;
+    width: 260px;
+    height: 100vh;
+  }
+  .admin-sidebar.open {
+    display: block;
   }
   .admin-main {
     margin-left: 0;
     padding: 16px;
-  }
-  .admin-layout.sidebar-open .admin-sidebar {
-    display: block;
-    position: fixed;
-    z-index: 200;
-    width: 260px;
   }
   .filter-bar {
     flex-direction: column;
@@ -623,6 +673,8 @@ body {
   }
   .data-table {
     font-size: 12px;
+    display: block;
+    overflow-x: auto;
   }
   .data-table th,
   .data-table td {
