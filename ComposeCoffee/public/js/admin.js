@@ -49,8 +49,10 @@
 
   function formatTime(dt) {
     if (!dt) return '-';
-    const d = new Date(dt + (dt.includes('Z') || dt.includes('+') ? '' : 'Z'));
-    return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+    // KST 문자열에서 시:분만 추출
+    const timePart = dt.includes(' ') ? dt.split(' ')[1] : dt.split('T')[1];
+    if (timePart) return timePart.substring(0, 5);
+    return '-';
   }
 
   function statusBadge(status) {
@@ -187,7 +189,8 @@
       branches = data.branches;
 
       const tbody = $('#branches-table tbody');
-      tbody.innerHTML = branches.map(b => `
+      const displayBranches = branches.filter(b => b.name !== '본사');
+      tbody.innerHTML = displayBranches.map(b => `
         <tr>
           <td><strong>${b.name}</strong></td>
           <td>${b.address || '-'}</td>
@@ -217,6 +220,8 @@
         el.innerHTML = firstOption;
       }
       branches.forEach(b => {
+        // "본사"는 직원 등록(user-branch)에만 표시, 일반 필터와 QR에서는 숨김
+        if (b.name === '본사' && sel !== '#user-branch') return;
         el.innerHTML += `<option value="${b.id}">${b.name}</option>`;
       });
     });
@@ -446,7 +451,23 @@
     $('#user-login-id').disabled = false;
     $('#pw-group').style.display = 'block';
     $('#user-password').required = true;
+    $('#user-branch').disabled = false;
     $('#modal-user').classList.add('active');
+  });
+
+  // 역할 변경 시 관리자면 자동으로 본사 선택
+  $('#user-role').addEventListener('change', () => {
+    const role = $('#user-role').value;
+    if (role === 'admin') {
+      const hqOption = Array.from($('#user-branch').options).find(o => o.textContent === '본사');
+      if (hqOption) {
+        $('#user-branch').value = hqOption.value;
+        $('#user-branch').disabled = true;
+      }
+    } else {
+      $('#user-branch').disabled = false;
+      $('#user-branch').value = '';
+    }
   });
 
   window.editUser = async function(id) {

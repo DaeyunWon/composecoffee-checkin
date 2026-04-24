@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const config = require('../config');
 const { authenticate } = require('../middleware/auth');
+const { getKSTNow } = require('../utils/kst');
 
 const router = express.Router();
 
@@ -92,7 +93,7 @@ router.post('/change-password', authenticate, (req, res) => {
     }
 
     const newHash = bcrypt.hashSync(newPassword, 12);
-    db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(newHash, req.user.id);
+    db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(newHash, getKSTNow(), req.user.id);
 
     res.json({ message: '비밀번호가 변경되었습니다.' });
   } catch (err) {

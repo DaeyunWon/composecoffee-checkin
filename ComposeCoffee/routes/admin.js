@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const config = require('../config');
 const { authenticate, requireAdmin } = require('../middleware/auth');
+const { getKSTDate, getKSTYear, getKSTMonth } = require('../utils/kst');
 
 const router = express.Router();
 
@@ -187,15 +188,17 @@ router.put('/users/:id', (req, res) => {
       return res.status(404).json({ error: '직원을 찾을 수 없습니다.' });
     }
 
+    const kstNow = getKSTNow();
+
     if (password) {
       const passwordHash = bcrypt.hashSync(password, 12);
-      db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run(passwordHash, req.params.id);
+      db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
+        .run(passwordHash, kstNow, req.params.id);
     }
 
     db.prepare(`
       UPDATE users SET
-        name = ?, phone = ?, role = ?, branch_id = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+        name = ?, phone = ?, role = ?, branch_id = ?, is_active = ?, updated_at = ?
       WHERE id = ?
     `).run(
       name ?? user.name,
@@ -203,6 +206,7 @@ router.put('/users/:id', (req, res) => {
       role ?? user.role,
       branchId ?? user.branch_id,
       isActive ?? user.is_active,
+      kstNow,
       req.params.id
     );
 
@@ -245,7 +249,7 @@ router.get('/attendance/daily', (req, res) => {
   try {
     const db = global.db;
     const { date, branchId } = req.query;
-    const targetDate = date || new Date().toISOString().split('T')[0];
+    const targetDate = date || getKSTDate();
 
     let query = `
       SELECT
@@ -299,8 +303,8 @@ router.get('/attendance/monthly', (req, res) => {
   try {
     const db = global.db;
     const { year, month, branchId } = req.query;
-    const y = parseInt(year) || new Date().getFullYear();
-    const m = parseInt(month) || new Date().getMonth() + 1;
+    const y = parseInt(year) || getKSTYear();
+    const m = parseInt(month) || getKSTMonth();
 
     const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
     const endDate = m === 12
@@ -358,8 +362,8 @@ router.get('/attendance/export', (req, res) => {
   try {
     const db = global.db;
     const { year, month, branchId } = req.query;
-    const y = parseInt(year) || new Date().getFullYear();
-    const m = parseInt(month) || new Date().getMonth() + 1;
+    const y = parseInt(year) || getKSTYear();
+    const m = parseInt(month) || getKSTMonth();
 
     const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
     const endDate = m === 12

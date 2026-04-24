@@ -26,18 +26,21 @@ async function seed() {
   const branches = db.prepare('SELECT * FROM branches').all();
   branches.forEach(b => console.log(`  ✅ ${b.name} (ID: ${b.id}, 좌표: ${b.latitude}, ${b.longitude}, 반경: ${b.radius_meters}m)`));
 
-  // 2. 관리자 계정
+  // 2. 관리자 계정 (본사 소속)
   console.log('\n👤 관리자 계정 생성 중...');
+  const hqBranch = db.prepare("SELECT id FROM branches WHERE name = '본사'").get();
   const existingAdmin = db.prepare("SELECT id FROM users WHERE login_id = 'admin'").get();
   if (!existingAdmin) {
     const adminId = uuidv4();
     const adminPw = bcrypt.hashSync('admin123', 12);
     db.prepare(
       'INSERT INTO users (id, login_id, password_hash, name, phone, role, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(adminId, 'admin', adminPw, '관리자', '010-0000-0000', 'admin', branches[0].id);
-    console.log('  ✅ 관리자 - ID: admin / PW: admin123');
+    ).run(adminId, 'admin', adminPw, '관리자', '010-0000-0000', 'admin', hqBranch.id);
+    console.log('  ✅ 관리자 - ID: admin / PW: admin123 (소속: 본사)');
   } else {
-    console.log('  ⏭️ 관리자 계정이 이미 존재합니다.');
+    // 기존 관리자도 본사로 이동
+    db.prepare("UPDATE users SET branch_id = ? WHERE login_id = 'admin' AND role = 'admin'").run(hqBranch.id);
+    console.log('  ⏭️ 관리자 계정이 이미 존재합니다. (본사로 업데이트)');
   }
 
   // 3. 직원 계정

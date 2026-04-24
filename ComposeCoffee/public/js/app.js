@@ -36,16 +36,30 @@
     }, 3000);
   }
 
+  // 서버에서 KST 문자열("2026-04-24 09:30:00")이 오므로 그대로 파싱
+  function parseKST(datetime) {
+    if (!datetime) return null;
+    // "YYYY-MM-DD HH:MM:SS" → Date 객체 (로컬 시간으로 해석)
+    return new Date(datetime.replace(' ', 'T'));
+  }
+
   function formatTime(datetime) {
     if (!datetime) return '--:--';
-    const d = new Date(datetime + (datetime.includes('Z') || datetime.includes('+') ? '' : 'Z'));
-    return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+    // KST 문자열에서 시:분만 추출
+    const timePart = datetime.includes(' ') ? datetime.split(' ')[1] : datetime.split('T')[1];
+    if (timePart) return timePart.substring(0, 5);
+    return '--:--';
   }
 
   function formatDate(dateStr) {
-    const d = new Date(dateStr);
+    // "YYYY-MM-DD" 형식
+    const parts = dateStr.split('-');
+    const y = parseInt(parts[0]);
+    const m = parseInt(parts[1]);
+    const d = parseInt(parts[2]);
+    const dt = new Date(y, m - 1, d);
     const days = ['일', '월', '화', '수', '목', '금', '토'];
-    return `${d.getMonth() + 1}/${d.getDate()} (${days[d.getDay()]})`;
+    return `${m}/${d} (${days[dt.getDay()]})`;
   }
 
   // GPS 검증에 사용할 지점 반환 (QR 지점 > 소속 지점)
@@ -172,12 +186,12 @@
       }
 
       if (data.checkIn && data.checkOut) {
-        const inTime = new Date(data.checkIn.time);
-        const outTime = new Date(data.checkOut.time);
+        const inTime = parseKST(data.checkIn.time);
+        const outTime = parseKST(data.checkOut.time);
         const mins = Math.round((outTime - inTime) / 60000);
         $('#work-duration').textContent = `${Math.floor(mins / 60)}시간 ${mins % 60}분`;
       } else if (data.checkIn) {
-        const inTime = new Date(data.checkIn.time);
+        const inTime = parseKST(data.checkIn.time);
         const now = new Date();
         const mins = Math.round((now - inTime) / 60000);
         $('#work-duration').textContent = `${Math.floor(mins / 60)}시간 ${mins % 60}분 (근무중)`;
@@ -322,6 +336,12 @@
   }
 
   async function initCheckinScreen() {
+    // 관리자(본사 소속)이고 QR 접속이 아니면 관리 페이지로 이동
+    if (currentUser.role === 'admin' && currentUser.branch.name === '본사' && !qrBranchId) {
+      window.location.href = '/admin.html';
+      return;
+    }
+
     // 관리자일 경우 관리 페이지 링크 표시
     if (currentUser.role === 'admin') {
       const existing = document.querySelector('.admin-link');

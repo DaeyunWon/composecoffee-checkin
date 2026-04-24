@@ -156,6 +156,12 @@ async function initDatabase() {
     )
   `);
 
+  // "본사" 지점 자동 생성 (관리자용, 출퇴근 불필요)
+  const hq = wrapper.prepare("SELECT id FROM branches WHERE name = '본사'").get();
+  if (!hq) {
+    db.run("INSERT INTO branches (name, address, latitude, longitude, radius_meters) VALUES ('본사', '관리자 전용', 0, 0, 0)");
+  }
+
   // 인덱스 (IF NOT EXISTS로 안전하게)
   db.run('CREATE INDEX IF NOT EXISTS idx_attendance_user_time ON attendance(user_id, check_time)');
   db.run('CREATE INDEX IF NOT EXISTS idx_attendance_branch_time ON attendance(branch_id, check_time)');

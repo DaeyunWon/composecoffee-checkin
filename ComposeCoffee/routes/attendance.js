@@ -1,6 +1,7 @@
 const express = require('express');
 const config = require('../config');
 const { authenticate } = require('../middleware/auth');
+const { getKSTNow, getKSTDate, getKSTYear, getKSTMonth } = require('../utils/kst');
 
 const router = express.Router();
 
@@ -54,9 +55,9 @@ router.post('/check', authenticate, (req, res) => {
       });
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getKSTDate();
     const existing = db.prepare(
-      "SELECT * FROM attendance WHERE user_id = ? AND check_type = ? AND date(check_time) = date(?) ORDER BY check_time DESC LIMIT 1"
+      "SELECT * FROM attendance WHERE user_id = ? AND check_type = ? AND date(check_time) = ? ORDER BY check_time DESC LIMIT 1"
     ).get(req.user.id, checkType, today);
 
     if (checkType === 'in' && existing) {
@@ -68,7 +69,7 @@ router.post('/check', authenticate, (req, res) => {
 
     if (checkType === 'out') {
       const checkIn = db.prepare(
-        "SELECT * FROM attendance WHERE user_id = ? AND check_type = 'in' AND date(check_time) = date(?) ORDER BY check_time DESC LIMIT 1"
+        "SELECT * FROM attendance WHERE user_id = ? AND check_type = 'in' AND date(check_time) = ? ORDER BY check_time DESC LIMIT 1"
       ).get(req.user.id, today);
 
       if (!checkIn) {
@@ -76,13 +77,15 @@ router.post('/check', authenticate, (req, res) => {
       }
     }
 
-    // attendance에는 실제 근무 지점(workBranchId) 저장
+    // KST 시간으로 명시적 저장
+    const kstNow = getKSTNow();
     const result = db.prepare(
-      'INSERT INTO attendance (user_id, branch_id, check_type, latitude, longitude, distance_meters, is_valid_location) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO attendance (user_id, branch_id, check_type, check_time, latitude, longitude, distance_meters, is_valid_location) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       req.user.id,
       workBranchId,
       checkType,
+      kstNow,
       latitude,
       longitude,
       Math.round(distance),
@@ -115,10 +118,10 @@ router.post('/check', authenticate, (req, res) => {
 router.get('/today', authenticate, (req, res) => {
   try {
     const db = global.db;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getKSTDate();
 
     const records = db.prepare(
-      "SELECT a.*, b.name as branch_name FROM attendance a JOIN branches b ON a.branch_id = b.id WHERE a.user_id = ? AND date(a.check_time) = date(?) ORDER BY a.check_time ASC"
+      "SELECT a.*, b.name as branch_name FROM attendance a JOIN branches b ON a.branch_id = b.id WHERE a.user_id = ? AND date(a.check_time) = ? ORDER BY a.check_time ASC"
     ).all(req.user.id, today);
 
     const checkIn = records.find(r => r.check_type === 'in');
@@ -148,8 +151,8 @@ router.get('/my-history', authenticate, (req, res) => {
   try {
     const db = global.db;
     const { year, month } = req.query;
-    const y = parseInt(year) || new Date().getFullYear();
-    const m = parseInt(month) || new Date().getMonth() + 1;
+    const y = parseInt(year) || getKSTYear();
+    const m = parseInt(month) || getKSTMonth();
 
     const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
     const endDate = m === 12
