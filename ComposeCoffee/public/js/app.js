@@ -338,6 +338,8 @@
   async function initCheckinScreen() {
     // 관리자(본사 소속)이고 QR 접속이 아니면 관리 페이지로 이동
     if (currentUser.role === 'admin' && currentUser.branch.name === '본사' && !qrBranchId) {
+      // 관리자 페이지에서도 같은 토큰으로 자동 로그인되도록
+      localStorage.setItem('cc_admin_token', token);
       window.location.href = '/admin.html';
       return;
     }
