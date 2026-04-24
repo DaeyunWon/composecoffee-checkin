@@ -162,15 +162,19 @@
 
       // 오늘 테이블
       const tbody = $('#dashboard-table tbody');
-      tbody.innerHTML = dailyData.records.map(r => `
+      tbody.innerHTML = dailyData.records.map(r => {
+        const dispatchTag = r.isDispatch && r.workBranchName
+          ? ` <span style="color:#E65100;font-size:11px;">(→${r.workBranchName})</span>`
+          : '';
+        return `
         <tr>
-          <td>${r.branch_name}</td>
+          <td>${r.branch_name}${dispatchTag}</td>
           <td>${r.name}</td>
           <td>${formatTime(r.check_in_time)}</td>
           <td>${formatTime(r.check_out_time)}</td>
           <td>${statusBadge(r.status)}</td>
-        </tr>
-      `).join('');
+        </tr>`;
+      }).join('');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -412,17 +416,21 @@
       const data = await apiFetch(`/admin/attendance/daily${query}`);
 
       const tbody = $('#daily-table tbody');
-      tbody.innerHTML = data.records.map(r => `
+      tbody.innerHTML = data.records.map(r => {
+        const dispatchTag = r.isDispatch && r.workBranchName
+          ? ` <span style="color:#E65100;font-size:11px;">(→${r.workBranchName})</span>`
+          : '';
+        return `
         <tr>
-          <td>${r.branch_name}</td>
+          <td>${r.branch_name}${dispatchTag}</td>
           <td>${r.name}</td>
           <td>${formatTime(r.check_in_time)}</td>
           <td>${formatTime(r.check_out_time)}</td>
           <td>${r.workHours}</td>
           <td>${r.check_in_distance != null ? r.check_in_distance : '-'}</td>
           <td>${statusBadge(r.status)}</td>
-        </tr>
-      `).join('');
+        </tr>`;
+      }).join('');
     } catch (err) {
       showToast(err.message, 'error');
     }

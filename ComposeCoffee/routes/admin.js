@@ -253,10 +253,13 @@ router.get('/attendance/daily', (req, res) => {
         b.name as branch_name, b.id as branch_id,
         MIN(CASE WHEN a.check_type = 'in' THEN a.check_time END) as check_in_time,
         MAX(CASE WHEN a.check_type = 'out' THEN a.check_time END) as check_out_time,
-        MIN(CASE WHEN a.check_type = 'in' THEN a.distance_meters END) as check_in_distance
+        MIN(CASE WHEN a.check_type = 'in' THEN a.distance_meters END) as check_in_distance,
+        MIN(CASE WHEN a.check_type = 'in' THEN a.branch_id END) as work_branch_id,
+        MIN(CASE WHEN a.check_type = 'in' THEN wb.name END) as work_branch_name
       FROM users u
       JOIN branches b ON u.branch_id = b.id
       LEFT JOIN attendance a ON a.user_id = u.id AND date(a.check_time) = date(?)
+      LEFT JOIN branches wb ON a.branch_id = wb.id
       WHERE u.is_active = 1
     `;
     const params = [targetDate];
@@ -274,11 +277,14 @@ router.get('/attendance/daily', (req, res) => {
       if (r.check_in_time && r.check_out_time) {
         workMinutes = Math.round((new Date(r.check_out_time) - new Date(r.check_in_time)) / 60000);
       }
+      const isDispatch = r.work_branch_id && r.work_branch_id !== r.branch_id;
       return {
         ...r,
         workMinutes,
         workHours: workMinutes > 0 ? `${Math.floor(workMinutes / 60)}시간 ${workMinutes % 60}분` : '-',
-        status: !r.check_in_time ? '미출근' : !r.check_out_time ? '근무중' : '퇴근'
+        status: !r.check_in_time ? '미출근' : !r.check_out_time ? '근무중' : '퇴근',
+        isDispatch,
+        workBranchName: isDispatch ? r.work_branch_name : null
       };
     });
 

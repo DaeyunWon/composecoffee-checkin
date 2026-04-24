@@ -8,6 +8,7 @@
   let currentPosition = null;
   let watchId = null;
   let qrBranchId = new URLSearchParams(window.location.search).get('branch');
+  let workBranch = null; // QR 지점 정보 (파견 근무 시 사용)
 
   // ==================== 유틸 ====================
   function $(sel) { return document.querySelector(sel); }
@@ -47,6 +48,11 @@
     return `${d.getMonth() + 1}/${d.getDate()} (${days[d.getDay()]})`;
   }
 
+  // GPS 검증에 사용할 지점 반환 (QR 지점 > 소속 지점)
+  function getTargetBranch() {
+    return workBranch || (currentUser && currentUser.branch);
+  }
+
   // ==================== 화면 전환 ====================
   function showScreen(screenId) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -83,19 +89,22 @@
           accuracy: pos.coords.accuracy
         };
 
-        if (currentUser && currentUser.branch) {
+        const branch = getTargetBranch();
+        if (branch) {
           const dist = calculateDistance(
             currentPosition.latitude, currentPosition.longitude,
-            currentUser.branch.latitude, currentUser.branch.longitude
+            branch.latitude, branch.longitude
           );
 
-          if (dist <= currentUser.branch.radius_meters) {
+          const label = workBranch ? `${workBranch.name} (파견)` : branch.name;
+
+          if (dist <= branch.radius_meters) {
             locStatus.className = 'location-status valid';
-            locText.textContent = `${currentUser.branch.name}에서 ${Math.round(dist)}m 이내 (정확도: ±${Math.round(pos.coords.accuracy)}m)`;
+            locText.textContent = `${label}에서 ${Math.round(dist)}m 이내 (정확도: ±${Math.round(pos.coords.accuracy)}m)`;
             updateButtons(true);
           } else {
             locStatus.className = 'location-status invalid';
-            locText.textContent = `지점에서 ${Math.round(dist)}m 떨어져 있습니다 (허용: ${currentUser.branch.radius_meters}m)`;
+            locText.textContent = `${label}에서 ${Math.round(dist)}m 떨어져 있습니다 (허용: ${branch.radius_meters}m)`;
             updateButtons(false);
           }
         }
@@ -151,6 +160,17 @@
       $('#checkin-time').textContent = data.checkIn ? formatTime(data.checkIn.time) : '--:--';
       $('#checkout-time').textContent = data.checkOut ? formatTime(data.checkOut.time) : '--:--';
 
+      // 파견 근무 표시
+      const dispatchEl = $('#dispatch-info');
+      if (dispatchEl) {
+        if (data.isDispatch && data.workBranch) {
+          dispatchEl.textContent = `📌 파견 근무: ${data.workBranch}`;
+          dispatchEl.style.display = 'block';
+        } else {
+          dispatchEl.style.display = 'none';
+        }
+      }
+
       if (data.checkIn && data.checkOut) {
         const inTime = new Date(data.checkIn.time);
         const outTime = new Date(data.checkOut.time);
@@ -167,11 +187,14 @@
 
       // 버튼 상태 업데이트
       if (currentPosition) {
-        const dist = calculateDistance(
-          currentPosition.latitude, currentPosition.longitude,
-          currentUser.branch.latitude, currentUser.branch.longitude
-        );
-        updateButtons(dist <= currentUser.branch.radius_meters);
+        const branch = getTargetBranch();
+        if (branch) {
+          const dist = calculateDistance(
+            currentPosition.latitude, currentPosition.longitude,
+            branch.latitude, branch.longitude
+          );
+          updateButtons(dist <= branch.radius_meters);
+        }
       }
     } catch (err) {
       console.error('Failed to load today status:', err);
@@ -261,10 +284,8 @@
       currentUser = data.user;
       errorEl.classList.add('hidden');
 
-      // QR 지점과 소속 지점이 다르면 경고
-      if (qrBranchId && parseInt(qrBranchId) !== data.user.branch.id) {
-        showToast(`⚠️ 이 QR코드는 다른 지점용입니다. 본인 소속: ${data.user.branch.name}`, 'error');
-      }
+      // QR 지점이 소속 지점과 다르면 파견 근무 모드
+      await setupWorkBranch();
 
       initCheckinScreen();
     } catch (err) {
@@ -273,11 +294,28 @@
     }
   }
 
+  // QR 지점 정보를 로드하고, 소속과 다르면 파견 모드 설정
+  async function setupWorkBranch() {
+    workBranch = null;
+    if (qrBranchId && currentUser && parseInt(qrBranchId) !== currentUser.branch.id) {
+      try {
+        const branch = await fetch(`${API}/branch/${qrBranchId}/info`).then(r => r.json());
+        if (branch && branch.id) {
+          workBranch = branch;
+          showToast(`📌 ${branch.name} 파견 근무 모드`, 'info');
+        }
+      } catch (e) {
+        console.error('Failed to load QR branch info:', e);
+      }
+    }
+  }
+
   function handleLogout() {
     token = null;
     currentUser = null;
     currentPosition = null;
     todayStatus = null;
+    workBranch = null;
     localStorage.removeItem('cc_token');
     stopLocationWatch();
     showScreen('login-screen');
@@ -286,17 +324,28 @@
   async function initCheckinScreen() {
     // 관리자일 경우 관리 페이지 링크 표시
     if (currentUser.role === 'admin') {
-      const adminLink = document.createElement('a');
-      adminLink.href = '/admin.html';
-      adminLink.className = 'btn btn-sm btn-outline';
-      adminLink.style.cssText = 'color:#FFB300;border-color:#FFB300;margin-right:8px;';
-      adminLink.textContent = '관리자 페이지';
-      const headerRight = $('.header-right');
-      headerRight.insertBefore(adminLink, headerRight.firstChild);
+      const existing = document.querySelector('.admin-link');
+      if (!existing) {
+        const adminLink = document.createElement('a');
+        adminLink.href = '/admin.html';
+        adminLink.className = 'btn btn-sm btn-outline admin-link';
+        adminLink.style.cssText = 'color:#FFB300;border-color:#FFB300;margin-right:8px;';
+        adminLink.textContent = '관리자 페이지';
+        const headerRight = $('.header-right');
+        headerRight.insertBefore(adminLink, headerRight.firstChild);
+      }
     }
 
     $('#user-name').textContent = currentUser.name;
-    $('#branch-name').textContent = currentUser.branch.name;
+
+    // 파견 근무 시 지점 표시 변경
+    if (workBranch) {
+      $('#branch-name').textContent = `${workBranch.name} (파견)`;
+      $('#branch-name').style.color = '#FF8F00';
+    } else {
+      $('#branch-name').textContent = currentUser.branch.name;
+      $('#branch-name').style.color = '';
+    }
 
     showScreen('checkin-screen');
     updateClock();
@@ -327,13 +376,20 @@
     btn.innerHTML = '<span class="spinner"></span> 처리중...';
 
     try {
+      const body = {
+        checkType,
+        latitude: currentPosition.latitude,
+        longitude: currentPosition.longitude
+      };
+
+      // QR 지점이 소속과 다르면 branchId 전송 (파견 근무)
+      if (workBranch) {
+        body.branchId = workBranch.id;
+      }
+
       const data = await apiFetch('/attendance/check', {
         method: 'POST',
-        body: JSON.stringify({
-          checkType,
-          latitude: currentPosition.latitude,
-          longitude: currentPosition.longitude
-        })
+        body: JSON.stringify(body)
       });
 
       showToast(data.message, 'success');
@@ -346,7 +402,6 @@
     }
   }
 
-  // ==================== 초기화 ====================
   // ==================== 마이페이지 ====================
   function openMypage() {
     $('#my-name').textContent = currentUser.name;
@@ -412,7 +467,7 @@
     // QR코드로 접속한 경우 지점명 표시
     if (qrBranchId) {
       try {
-        const res = await fetch(`${API}/branch/${qrBranchId}/name`);
+        const res = await fetch(`${API}/branch/${qrBranchId}/info`);
         if (res.ok) {
           const branch = await res.json();
           const el = $('#qr-branch-name');
@@ -427,6 +482,7 @@
       try {
         const data = await apiFetch('/auth/me');
         currentUser = data.user;
+        await setupWorkBranch();
         initCheckinScreen();
       } catch (err) {
         handleLogout();

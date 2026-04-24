@@ -298,6 +298,19 @@ body {
   color: var(--primary);
 }
 
+/* 파견 근무 알림 */
+.dispatch-info {
+  background: #FFF3E0;
+  color: #E65100;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  text-align: center;
+  border: 1px solid #FFB74D;
+}
+
 /* 위치 상태 */
 .location-status {
   display: flex;

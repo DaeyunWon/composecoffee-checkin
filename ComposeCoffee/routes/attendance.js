@@ -22,10 +22,11 @@ function toRad(deg) {
 }
 
 // POST /api/attendance/check - 출근 또는 퇴근 기록
+// branchId를 보내면 해당 지점(QR 지점) 기준으로 GPS 검증 (파견 근무 지원)
 router.post('/check', authenticate, (req, res) => {
   try {
     const db = global.db;
-    const { checkType, latitude, longitude } = req.body;
+    const { checkType, latitude, longitude, branchId } = req.body;
 
     if (!checkType || !['in', 'out'].includes(checkType)) {
       return res.status(400).json({ error: '출근(in) 또는 퇴근(out)을 지정해주세요.' });
@@ -35,9 +36,11 @@ router.post('/check', authenticate, (req, res) => {
       return res.status(400).json({ error: '위치 정보가 필요합니다. 위치 권한을 허용해주세요.' });
     }
 
-    const branch = db.prepare('SELECT * FROM branches WHERE id = ?').get(req.user.branch_id);
+    // QR 지점이 지정되면 해당 지점 기준, 아니면 소속 지점 기준
+    const workBranchId = branchId ? parseInt(branchId) : req.user.branch_id;
+    const branch = db.prepare('SELECT * FROM branches WHERE id = ?').get(workBranchId);
     if (!branch) {
-      return res.status(400).json({ error: '소속 지점 정보를 찾을 수 없습니다.' });
+      return res.status(400).json({ error: '지점 정보를 찾을 수 없습니다.' });
     }
 
     const distance = calculateDistance(latitude, longitude, branch.latitude, branch.longitude);
@@ -45,7 +48,7 @@ router.post('/check', authenticate, (req, res) => {
 
     if (!isValidLocation) {
       return res.status(400).json({
-        error: `현재 위치가 지점으로부터 ${Math.round(distance)}m 떨어져 있습니다. 허용 반경(${branch.radius_meters}m) 내에서 시도해주세요.`,
+        error: `현재 위치가 ${branch.name}으로부터 ${Math.round(distance)}m 떨어져 있습니다. 허용 반경(${branch.radius_meters}m) 내에서 시도해주세요.`,
         distance: Math.round(distance),
         allowedRadius: branch.radius_meters
       });
@@ -73,11 +76,12 @@ router.post('/check', authenticate, (req, res) => {
       }
     }
 
+    // attendance에는 실제 근무 지점(workBranchId) 저장
     const result = db.prepare(
       'INSERT INTO attendance (user_id, branch_id, check_type, latitude, longitude, distance_meters, is_valid_location) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).run(
       req.user.id,
-      req.user.branch_id,
+      workBranchId,
       checkType,
       latitude,
       longitude,
@@ -86,15 +90,19 @@ router.post('/check', authenticate, (req, res) => {
     );
 
     const record = db.prepare('SELECT * FROM attendance WHERE id = ?').get(result.lastInsertRowid);
+    const isDispatch = workBranchId !== req.user.branch_id;
 
     res.json({
-      message: checkType === 'in' ? '출근이 기록되었습니다.' : '퇴근이 기록되었습니다.',
+      message: checkType === 'in'
+        ? (isDispatch ? `${branch.name} 파견 출근이 기록되었습니다.` : '출근이 기록되었습니다.')
+        : '퇴근이 기록되었습니다.',
       record: {
         id: record.id,
         checkType: record.check_type,
         checkTime: record.check_time,
         distance: Math.round(distance),
-        branchName: branch.name
+        branchName: branch.name,
+        isDispatch
       }
     });
   } catch (err) {
@@ -116,11 +124,18 @@ router.get('/today', authenticate, (req, res) => {
     const checkIn = records.find(r => r.check_type === 'in');
     const checkOut = records.filter(r => r.check_type === 'out').pop();
 
+    // 근무 지점 정보 (파견 여부 확인용)
+    const workBranchId = checkIn ? checkIn.branch_id : null;
+    const isDispatch = workBranchId && workBranchId !== req.user.branch_id;
+    const workBranchName = checkIn ? checkIn.branch_name : null;
+
     res.json({
       date: today,
       checkIn: checkIn ? { time: checkIn.check_time, distance: checkIn.distance_meters } : null,
       checkOut: checkOut ? { time: checkOut.check_time, distance: checkOut.distance_meters } : null,
-      status: !checkIn ? 'not_checked_in' : !checkOut ? 'working' : 'done'
+      status: !checkIn ? 'not_checked_in' : !checkOut ? 'working' : 'done',
+      workBranch: workBranchName,
+      isDispatch: !!isDispatch
     });
   } catch (err) {
     console.error('Today status error:', err);
