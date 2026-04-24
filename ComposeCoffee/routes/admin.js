@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const config = require('../config');
 const { authenticate, requireAdmin } = require('../middleware/auth');
-const { getKSTDate, getKSTYear, getKSTMonth } = require('../utils/kst');
+const { getKSTNow, getKSTDate, getKSTYear, getKSTMonth } = require('../utils/kst');
 
 const router = express.Router();
 
