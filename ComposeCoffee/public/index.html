@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ComposeCoffee 출퇴근</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 로그인 화면 -->
+    <div id="login-screen" class="screen active">
+      <div class="login-container">
+        <div class="logo">
+          <div class="logo-icon">☕</div>
+          <h1>ComposeCoffee</h1>
+          <p class="subtitle">출퇴근 관리</p>
+        </div>
+        <form id="login-form">
+          <div class="form-group">
+            <label for="login-id">아이디</label>
+            <input type="text" id="login-id" placeholder="아이디를 입력하세요" autocomplete="username" required>
+          </div>
+          <div class="form-group">
+            <label for="login-pw">비밀번호</label>
+            <input type="password" id="login-pw" placeholder="비밀번호를 입력하세요" autocomplete="current-password" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">로그인</button>
+          <p id="login-error" class="error-text hidden"></p>
+        </form>
+      </div>
+    </div>
+
+    <!-- 출퇴근 화면 -->
+    <div id="checkin-screen" class="screen">
+      <header class="app-header">
+        <div class="header-left">
+          <span class="branch-badge" id="branch-name"></span>
+        </div>
+        <div class="header-right">
+          <span id="user-name"></span>
+          <button class="btn btn-sm btn-outline" id="btn-logout">로그아웃</button>
+        </div>
+      </header>
+
+      <main class="main-content">
+        <!-- 현재 시간 -->
+        <div class="time-display">
+          <div class="current-date" id="current-date"></div>
+          <div class="current-time" id="current-time"></div>
+        </div>
+
+        <!-- 출퇴근 상태 -->
+        <div class="status-card" id="status-card">
+          <div class="status-row">
+            <span class="status-label">출근</span>
+            <span class="status-value" id="checkin-time">--:--</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">퇴근</span>
+            <span class="status-value" id="checkout-time">--:--</span>
+          </div>
+          <div class="status-row total">
+            <span class="status-label">근무시간</span>
+            <span class="status-value" id="work-duration">-</span>
+          </div>
+        </div>
+
+        <!-- 위치 상태 -->
+        <div class="location-status" id="location-status">
+          <span class="location-icon">📍</span>
+          <span id="location-text">위치 확인 중...</span>
+        </div>
+
+        <!-- 출퇴근 버튼 -->
+        <div class="action-buttons">
+          <button class="btn btn-checkin" id="btn-checkin" disabled>
+            <span class="btn-icon">🟢</span>
+            출근하기
+          </button>
+          <button class="btn btn-checkout" id="btn-checkout" disabled>
+            <span class="btn-icon">🔴</span>
+            퇴근하기
+          </button>
+        </div>
+
+        <!-- 이번 달 근무 이력 -->
+        <div class="history-section">
+          <h3>이번 달 근무 이력</h3>
+          <div class="history-summary" id="history-summary"></div>
+          <div class="history-list" id="history-list"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

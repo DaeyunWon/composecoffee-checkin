@@ -1,0 +1,15 @@
+# Render.com 배포 설정
+# 무료 플랜: 디스크 미포함 (재배포 시 데이터 초기화됨)
+# 운영용: Starter($7/월) 플랜에서 디스크 추가 필요
+services:
+  - type: web
+    name: composecoffee-checkin
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node scripts/seed.js && node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true

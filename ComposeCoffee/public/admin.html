@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ComposeCoffee 관리자</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="admin-login" class="screen active">
+    <div class="login-container">
+      <div class="logo">
+        <div class="logo-icon">☕</div>
+        <h1>ComposeCoffee</h1>
+        <p class="subtitle">관리자 로그인</p>
+      </div>
+      <form id="admin-login-form">
+        <div class="form-group">
+          <label for="admin-id">관리자 아이디</label>
+          <input type="text" id="admin-id" placeholder="아이디" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label for="admin-pw">비밀번호</label>
+          <input type="password" id="admin-pw" placeholder="비밀번호" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">관리자 로그인</button>
+        <p id="admin-login-error" class="error-text hidden"></p>
+      </form>
+    </div>
+  </div>
+
+  <div id="admin-app" class="screen">
+    <div class="admin-layout">
+      <!-- 사이드바 -->
+      <aside class="admin-sidebar">
+        <div class="logo">
+          <h2>☕ ComposeCoffee</h2>
+          <p>출퇴근 관리 시스템</p>
+        </div>
+        <ul class="nav-menu">
+          <li><a href="#" data-section="dashboard" class="active">📊 대시보드</a></li>
+          <li><a href="#" data-section="branches">🏪 지점 관리</a></li>
+          <li><a href="#" data-section="users">👥 직원 관리</a></li>
+          <li><a href="#" data-section="daily">📋 일별 현황</a></li>
+          <li><a href="#" data-section="monthly">📈 월별 리포트</a></li>
+          <li><a href="#" data-section="qrcode">📱 QR코드</a></li>
+        </ul>
+        <div style="padding: 20px; margin-top: auto;">
+          <button class="btn btn-outline btn-full btn-sm" id="admin-logout">로그아웃</button>
+        </div>
+      </aside>
+
+      <!-- 메인 콘텐츠 -->
+      <div class="admin-main">
+        <!-- 대시보드 -->
+        <section id="sec-dashboard" class="admin-section active">
+          <div class="admin-header">
+            <h2>대시보드</h2>
+            <span id="dashboard-date"></span>
+          </div>
+          <div id="dashboard-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px;"></div>
+          <h3 style="margin-bottom:12px;">오늘 출퇴근 현황</h3>
+          <table class="data-table" id="dashboard-table">
+            <thead>
+              <tr><th>지점</th><th>이름</th><th>출근</th><th>퇴근</th><th>상태</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+
+        <!-- 지점 관리 -->
+        <section id="sec-branches" class="admin-section" style="display:none;">
+          <div class="admin-header">
+            <h2>지점 관리</h2>
+            <button class="btn btn-primary btn-sm" id="btn-add-branch">+ 지점 추가</button>
+          </div>
+          <table class="data-table" id="branches-table">
+            <thead>
+              <tr><th>지점명</th><th>주소</th><th>좌표</th><th>반경</th><th>직원수</th><th>관리</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+
+        <!-- 직원 관리 -->
+        <section id="sec-users" class="admin-section" style="display:none;">
+          <div class="admin-header">
+            <h2>직원 관리</h2>
+            <button class="btn btn-primary btn-sm" id="btn-add-user">+ 직원 등록</button>
+          </div>
+          <div class="filter-bar">
+            <select id="filter-user-branch"><option value="">전체 지점</option></select>
+          </div>
+          <table class="data-table" id="users-table">
+            <thead>
+              <tr><th>이름</th><th>로그인 ID</th><th>지점</th><th>역할</th><th>상태</th><th>관리</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+
+        <!-- 일별 현황 -->
+        <section id="sec-daily" class="admin-section" style="display:none;">
+          <div class="admin-header">
+            <h2>일별 출퇴근 현황</h2>
+          </div>
+          <div class="filter-bar">
+            <input type="date" id="filter-daily-date">
+            <select id="filter-daily-branch"><option value="">전체 지점</option></select>
+          </div>
+          <table class="data-table" id="daily-table">
+            <thead>
+              <tr><th>지점</th><th>이름</th><th>출근</th><th>퇴근</th><th>근무시간</th><th>거리(m)</th><th>상태</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+
+        <!-- 월별 리포트 -->
+        <section id="sec-monthly" class="admin-section" style="display:none;">
+          <div class="admin-header">
+            <h2>월별 근무 리포트</h2>
+            <button class="btn btn-outline btn-sm" id="btn-export-csv">📥 CSV 다운로드</button>
+          </div>
+          <div class="filter-bar">
+            <select id="filter-monthly-year"></select>
+            <select id="filter-monthly-month"></select>
+            <select id="filter-monthly-branch"><option value="">전체 지점</option></select>
+            <button class="btn btn-primary btn-sm" id="btn-load-monthly">조회</button>
+          </div>
+          <table class="data-table" id="monthly-table">
+            <thead>
+              <tr><th>지점</th><th>이름</th><th>출근일수</th><th>총 근무시간</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+
+        <!-- QR코드 -->
+        <section id="sec-qrcode" class="admin-section" style="display:none;">
+          <div class="admin-header">
+            <h2>QR코드 관리</h2>
+          </div>
+          <div class="filter-bar">
+            <select id="filter-qr-branch"><option value="">지점을 선택하세요</option></select>
+            <div class="form-group" style="margin:0;">
+              <input type="text" id="qr-base-url" placeholder="서버 주소 (예: https://checkin.composecoffee.com)" style="width:350px;">
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-gen-qr">QR코드 생성</button>
+          </div>
+          <div class="qr-container" id="qr-display"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- 지점 추가/수정 모달 -->
+  <div class="modal-overlay" id="modal-branch">
+    <div class="modal">
+      <h3 id="modal-branch-title">지점 추가</h3>
+      <form id="form-branch">
+        <input type="hidden" id="branch-edit-id">
+        <div class="form-group">
+          <label>지점명 *</label>
+          <input type="text" id="branch-name" required placeholder="예: 강남점">
+        </div>
+        <div class="form-group">
+          <label>주소</label>
+          <input type="text" id="branch-address" placeholder="예: 서울시 강남구 역삼로 123">
+        </div>
+        <div class="form-group">
+          <label>위도 *</label>
+          <input type="number" id="branch-lat" step="any" required placeholder="37.123456">
+        </div>
+        <div class="form-group">
+          <label>경도 *</label>
+          <input type="number" id="branch-lng" step="any" required placeholder="127.123456">
+        </div>
+        <div class="form-group">
+          <label>허용 반경 (m)</label>
+          <input type="number" id="branch-radius" value="50" min="10" max="1000">
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" id="btn-get-current-location">📍 현재 위치 가져오기</button>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-branch').classList.remove('active')">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 직원 추가/수정 모달 -->
+  <div class="modal-overlay" id="modal-user">
+    <div class="modal">
+      <h3 id="modal-user-title">직원 등록</h3>
+      <form id="form-user">
+        <input type="hidden" id="user-edit-id">
+        <div class="form-group">
+          <label>로그인 ID *</label>
+          <input type="text" id="user-login-id" required placeholder="영문/숫자">
+        </div>
+        <div class="form-group" id="pw-group">
+          <label>비밀번호 * (6자 이상)</label>
+          <input type="password" id="user-password" placeholder="비밀번호">
+        </div>
+        <div class="form-group">
+          <label>이름 *</label>
+          <input type="text" id="user-name-input" required placeholder="실명">
+        </div>
+        <div class="form-group">
+          <label>전화번호</label>
+          <input type="tel" id="user-phone" placeholder="010-1234-5678">
+        </div>
+        <div class="form-group">
+          <label>소속 지점 *</label>
+          <select id="user-branch" required></select>
+        </div>
+        <div class="form-group">
+          <label>역할</label>
+          <select id="user-role">
+            <option value="staff">직원</option>
+            <option value="admin">관리자</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-user').classList.remove('active')">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/admin.js"></script>
+</body>
+</html>
