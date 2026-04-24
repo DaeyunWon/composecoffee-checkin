@@ -65,14 +65,16 @@
             <h2>대시보드</h2>
             <span id="dashboard-date"></span>
           </div>
-          <div id="dashboard-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px;"></div>
+          <div id="dashboard-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px;"></div>
           <h3 style="margin-bottom:12px;">오늘 출퇴근 현황</h3>
+          <div class="data-table-wrapper">
           <table class="data-table" id="dashboard-table">
             <thead>
               <tr><th>지점</th><th>이름</th><th>출근</th><th>퇴근</th><th>상태</th></tr>
             </thead>
             <tbody></tbody>
           </table>
+          </div>
         </section>
 
         <!-- 지점 관리 -->
@@ -81,12 +83,14 @@
             <h2>지점 관리</h2>
             <button class="btn btn-primary btn-sm" id="btn-add-branch">+ 지점 추가</button>
           </div>
+          <div class="data-table-wrapper">
           <table class="data-table" id="branches-table">
             <thead>
               <tr><th>지점명</th><th>주소</th><th>좌표</th><th>반경</th><th>직원수</th><th>관리</th></tr>
             </thead>
             <tbody></tbody>
           </table>
+          </div>
         </section>
 
         <!-- 직원 관리 -->
@@ -98,12 +102,14 @@
           <div class="filter-bar">
             <select id="filter-user-branch"><option value="">전체 지점</option></select>
           </div>
+          <div class="data-table-wrapper">
           <table class="data-table" id="users-table">
             <thead>
               <tr><th>이름</th><th>로그인 ID</th><th>지점</th><th>역할</th><th>상태</th><th>관리</th></tr>
             </thead>
             <tbody></tbody>
           </table>
+          </div>
         </section>
 
         <!-- 일별 현황 -->
@@ -115,12 +121,14 @@
             <input type="date" id="filter-daily-date">
             <select id="filter-daily-branch"><option value="">전체 지점</option></select>
           </div>
+          <div class="data-table-wrapper">
           <table class="data-table" id="daily-table">
             <thead>
               <tr><th>지점</th><th>이름</th><th>출근</th><th>퇴근</th><th>근무시간</th><th>거리(m)</th><th>상태</th></tr>
             </thead>
             <tbody></tbody>
           </table>
+          </div>
         </section>
 
         <!-- 월별 리포트 -->
@@ -135,12 +143,14 @@
             <select id="filter-monthly-branch"><option value="">전체 지점</option></select>
             <button class="btn btn-primary btn-sm" id="btn-load-monthly">조회</button>
           </div>
+          <div class="data-table-wrapper">
           <table class="data-table" id="monthly-table">
             <thead>
               <tr><th>지점</th><th>이름</th><th>출근일수</th><th>총 근무시간</th></tr>
             </thead>
             <tbody></tbody>
           </table>
+          </div>
         </section>
 
         <!-- QR코드 -->

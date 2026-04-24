@@ -679,23 +679,35 @@ body {
   }
   .admin-main {
     margin-left: 0;
-    padding: 16px;
+    padding: 12px;
     width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+    box-sizing: border-box;
   }
   .filter-bar {
     -webkit-flex-direction: column;
     flex-direction: column;
     align-items: stretch;
   }
-  .data-table {
-    font-size: 12px;
-    display: block;
+  .data-table-wrapper {
+    width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .data-table {
+    font-size: 12px;
+    min-width: 480px;
+    display: table;
+    border-radius: 0;
+    box-shadow: none;
   }
   .data-table th,
   .data-table td {
     padding: 8px 10px;
+    white-space: nowrap;
   }
   .admin-header {
     -webkit-flex-direction: column;
