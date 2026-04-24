@@ -280,6 +280,7 @@
           <td>
             <button class="btn btn-outline btn-sm" onclick="editUser('${u.id}')">수정</button>
             <button class="btn btn-outline btn-sm" onclick="toggleUser('${u.id}', ${u.is_active})">${u.is_active ? '비활성화' : '활성화'}</button>
+            <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="deleteUser('${u.id}', '${u.name}')">삭제</button>
           </td>
         </tr>
       `).join('');
@@ -333,6 +334,17 @@
         body: JSON.stringify({ isActive: currentActive ? 0 : 1 })
       });
       showToast(currentActive ? '비활성화되었습니다.' : '활성화되었습니다.', 'success');
+      loadUsers($('#filter-user-branch').value);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  window.deleteUser = async function(id, name) {
+    if (!confirm(`"${name}" 직원을 정말 삭제하시겠습니까?\n\n⚠️ 해당 직원의 모든 출퇴근 기록도 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.`)) return;
+    try {
+      await apiFetch(`/admin/users/${id}`, { method: 'DELETE' });
+      showToast(`${name} 직원이 삭제되었습니다.`, 'success');
       loadUsers($('#filter-user-branch').value);
     } catch (err) {
       showToast(err.message, 'error');

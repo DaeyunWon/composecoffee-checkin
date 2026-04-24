@@ -278,8 +278,15 @@
   }
 
   async function initCheckinScreen() {
+    // 관리자일 경우 관리 페이지 링크 표시
     if (currentUser.role === 'admin') {
-      // 관리자는 관리자 페이지로 리다이렉트 옵션 제공
+      const adminLink = document.createElement('a');
+      adminLink.href = '/admin.html';
+      adminLink.className = 'btn btn-sm btn-outline';
+      adminLink.style.cssText = 'color:#FFB300;border-color:#FFB300;margin-right:8px;';
+      adminLink.textContent = '관리자 페이지';
+      const headerRight = $('.header-right');
+      headerRight.insertBefore(adminLink, headerRight.firstChild);
     }
 
     $('#user-name').textContent = currentUser.name;
@@ -334,12 +341,67 @@
   }
 
   // ==================== 초기화 ====================
+  // ==================== 마이페이지 ====================
+  function openMypage() {
+    $('#my-name').textContent = currentUser.name;
+    $('#my-branch').textContent = currentUser.branch.name;
+    $('#my-role').textContent = currentUser.role === 'admin' ? '관리자' : '직원';
+    $('#form-change-pw').reset();
+    $('#pw-error').classList.add('hidden');
+    $('#modal-mypage').classList.add('active');
+  }
+
+  function closeMypage() {
+    $('#modal-mypage').classList.remove('active');
+  }
+
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    const errorEl = $('#pw-error');
+    const current = $('#pw-current').value;
+    const newPw = $('#pw-new').value;
+    const confirm = $('#pw-confirm').value;
+
+    if (newPw.length < 6) {
+      errorEl.textContent = '새 비밀번호는 6자 이상이어야 합니다.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    if (newPw !== confirm) {
+      errorEl.textContent = '새 비밀번호가 일치하지 않습니다.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    try {
+      await apiFetch('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: current, newPassword: newPw })
+      });
+      showToast('비밀번호가 변경되었습니다.', 'success');
+      closeMypage();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.classList.remove('hidden');
+    }
+  }
+
+  // ==================== 초기화 ====================
   async function init() {
     // 이벤트 바인딩
     $('#login-form').addEventListener('submit', handleLogin);
     $('#btn-logout').addEventListener('click', handleLogout);
     $('#btn-checkin').addEventListener('click', () => handleCheck('in'));
     $('#btn-checkout').addEventListener('click', () => handleCheck('out'));
+    $('#form-change-pw').addEventListener('submit', handleChangePassword);
+    $('#btn-close-mypage').addEventListener('click', closeMypage);
+    $('#btn-mypage').addEventListener('click', openMypage);
+
+    // 모달 바깥 클릭 시 닫기
+    $('#modal-mypage').addEventListener('click', (e) => {
+      if (e.target === $('#modal-mypage')) closeMypage();
+    });
 
     // 토큰이 있으면 자동 로그인 시도
     if (token) {

@@ -38,7 +38,8 @@
           <span class="branch-badge" id="branch-name"></span>
         </div>
         <div class="header-right">
-          <span id="user-name"></span>
+          <span id="user-name" style="cursor:pointer;text-decoration:underline;" title="마이페이지"></span>
+          <button class="btn btn-sm btn-outline" id="btn-mypage">마이페이지</button>
           <button class="btn btn-sm btn-outline" id="btn-logout">로그아웃</button>
         </div>
       </header>
@@ -91,6 +92,49 @@
           <div class="history-list" id="history-list"></div>
         </div>
       </main>
+    </div>
+
+    <!-- 마이페이지 모달 -->
+    <div class="modal-overlay" id="modal-mypage">
+      <div class="modal" style="max-width:400px;">
+        <h3>마이페이지</h3>
+        <div id="mypage-info" style="margin-bottom:20px;">
+          <div class="status-card">
+            <div class="status-row">
+              <span class="status-label">이름</span>
+              <span class="status-value" id="my-name" style="font-size:15px;"></span>
+            </div>
+            <div class="status-row">
+              <span class="status-label">소속 지점</span>
+              <span class="status-value" id="my-branch" style="font-size:15px;"></span>
+            </div>
+            <div class="status-row">
+              <span class="status-label">역할</span>
+              <span class="status-value" id="my-role" style="font-size:15px;"></span>
+            </div>
+          </div>
+        </div>
+        <h3 style="font-size:15px;margin-bottom:12px;">비밀번호 변경</h3>
+        <form id="form-change-pw">
+          <div class="form-group">
+            <label>현재 비밀번호</label>
+            <input type="password" id="pw-current" required placeholder="현재 비밀번호 입력">
+          </div>
+          <div class="form-group">
+            <label>새 비밀번호 (6자 이상)</label>
+            <input type="password" id="pw-new" required minlength="6" placeholder="새 비밀번호 입력">
+          </div>
+          <div class="form-group">
+            <label>새 비밀번호 확인</label>
+            <input type="password" id="pw-confirm" required minlength="6" placeholder="새 비밀번호 다시 입력">
+          </div>
+          <p id="pw-error" class="error-text hidden"></p>
+          <div style="display:flex;gap:10px;margin-top:20px;">
+            <button type="button" class="btn btn-outline" style="flex:1;" id="btn-close-mypage">닫기</button>
+            <button type="submit" class="btn btn-primary" style="flex:1;">비밀번호 변경</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 

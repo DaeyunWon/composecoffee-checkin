@@ -213,6 +213,32 @@ router.put('/users/:id', (req, res) => {
   }
 });
 
+// DELETE /api/admin/users/:id - 직원 삭제
+router.delete('/users/:id', (req, res) => {
+  try {
+    const db = global.db;
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({ error: '직원을 찾을 수 없습니다.' });
+    }
+
+    // 자기 자신은 삭제 불가
+    if (user.id === req.user.id) {
+      return res.status(400).json({ error: '자기 자신은 삭제할 수 없습니다.' });
+    }
+
+    // 출퇴근 기록이 있으면 기록도 함께 삭제
+    db.prepare('DELETE FROM attendance WHERE user_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+
+    res.json({ message: `${user.name} 직원이 삭제되었습니다.` });
+  } catch (err) {
+    console.error('Delete user error:', err);
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
+  }
+});
+
 // ==================== 근무 현황 / 리포트 ====================
 
 router.get('/attendance/daily', (req, res) => {
