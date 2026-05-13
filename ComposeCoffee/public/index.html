@@ -39,13 +39,20 @@
           <span class="branch-badge" id="branch-name"></span>
         </div>
         <div class="header-right">
+          <a href="/admin.html" id="admin-link" class="btn btn-sm btn-outline admin-link" style="color:#FFB300;border-color:#FFB300;margin-right:8px;display:none;">관리자 페이지</a>
           <span id="user-name" style="cursor:pointer;text-decoration:underline;" title="마이페이지"></span>
+          <button class="btn btn-sm btn-outline" id="btn-my-schedule">근무표</button>
           <button class="btn btn-sm btn-outline" id="btn-mypage">마이페이지</button>
           <button class="btn btn-sm btn-outline" id="btn-logout">로그아웃</button>
         </div>
       </header>
 
       <main class="main-content">
+        <!-- 환영 메시지 -->
+        <div class="welcome-greeting">
+          안녕하세요, <strong id="greeting-name"></strong>님 <span id="greeting-role-tag" class="greeting-role-tag" style="display:none;"></span>
+        </div>
+
         <!-- 현재 시간 -->
         <div class="time-display">
           <div class="current-date" id="current-date"></div>
@@ -66,10 +73,20 @@
             <span class="status-label">근무시간</span>
             <span class="status-value" id="work-duration">-</span>
           </div>
+          <div id="my-checkout-note" class="user-note-display" style="display:none;">
+            <div class="user-note-label">📝 제출한 퇴근 사유</div>
+            <div class="user-note-text" id="my-checkout-note-text"></div>
+          </div>
         </div>
 
         <!-- 파견 근무 알림 -->
         <div id="dispatch-info" class="dispatch-info" style="display:none;"></div>
+
+        <!-- 오늘의 근무 일정 -->
+        <div id="schedule-info" class="schedule-info" style="display:none;">
+          <span class="si-icon">🗓️</span>
+          <div class="si-text" id="schedule-info-text"></div>
+        </div>
 
         <!-- 위치 상태 -->
         <div class="location-status" id="location-status">
@@ -98,47 +115,113 @@
       </main>
     </div>
 
-    <!-- 마이페이지 모달 -->
-    <div class="modal-overlay" id="modal-mypage">
-      <div class="modal" style="max-width:400px;">
-        <h3>마이페이지</h3>
-        <div id="mypage-info" style="margin-bottom:20px;">
-          <div class="status-card">
-            <div class="status-row">
-              <span class="status-label">이름</span>
-              <span class="status-value" id="my-name" style="font-size:15px;"></span>
-            </div>
-            <div class="status-row">
-              <span class="status-label">소속 지점</span>
-              <span class="status-value" id="my-branch" style="font-size:15px;"></span>
-            </div>
-            <div class="status-row">
-              <span class="status-label">역할</span>
-              <span class="status-value" id="my-role" style="font-size:15px;"></span>
-            </div>
+    <!-- 마이페이지 스크린 -->
+    <div id="mypage-screen" class="screen">
+      <header class="app-header">
+        <div class="header-left">
+          <button class="btn btn-sm btn-outline" id="btn-back-from-mypage">← 돌아가기</button>
+        </div>
+        <div class="header-right">
+          <span class="branch-badge">마이페이지</span>
+        </div>
+      </header>
+
+      <main class="main-content">
+        <div class="status-card" style="margin-bottom:20px;">
+          <div class="status-row">
+            <span class="status-label">이름</span>
+            <span class="status-value" id="my-name" style="font-size:15px;"></span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">소속 지점</span>
+            <span class="status-value" id="my-branch" style="font-size:15px;"></span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">역할</span>
+            <span class="status-value" id="my-role" style="font-size:15px;"></span>
           </div>
         </div>
-        <h3 style="font-size:15px;margin-bottom:12px;">비밀번호 변경</h3>
-        <form id="form-change-pw">
-          <div class="form-group">
-            <label>현재 비밀번호</label>
-            <input type="password" id="pw-current" required placeholder="현재 비밀번호 입력">
-          </div>
-          <div class="form-group">
-            <label>새 비밀번호 (6자 이상)</label>
-            <input type="password" id="pw-new" required minlength="6" placeholder="새 비밀번호 입력">
-          </div>
-          <div class="form-group">
-            <label>새 비밀번호 확인</label>
-            <input type="password" id="pw-confirm" required minlength="6" placeholder="새 비밀번호 다시 입력">
-          </div>
-          <p id="pw-error" class="error-text hidden"></p>
-          <div style="display:flex;gap:10px;margin-top:20px;">
-            <button type="button" class="btn btn-outline" style="flex:1;" id="btn-close-mypage">닫기</button>
-            <button type="submit" class="btn btn-primary" style="flex:1;">비밀번호 변경</button>
-          </div>
-        </form>
+
+        <div class="form-section">
+          <h3>전화번호</h3>
+          <form id="form-update-profile">
+            <div class="form-group">
+              <label>전화번호</label>
+              <div style="display:flex;gap:8px;">
+                <input type="tel" id="my-phone" placeholder="010-1234-5678" maxlength="20" style="flex:1;">
+                <button type="submit" class="btn btn-primary btn-sm">저장</button>
+              </div>
+            </div>
+            <p id="profile-error" class="error-text hidden"></p>
+          </form>
+        </div>
+
+        <div class="form-section">
+          <h3>비밀번호 변경</h3>
+          <form id="form-change-pw">
+            <div class="form-group">
+              <label>현재 비밀번호</label>
+              <input type="password" id="pw-current" required placeholder="현재 비밀번호 입력">
+            </div>
+            <div class="form-group">
+              <label>새 비밀번호 (6자 이상)</label>
+              <input type="password" id="pw-new" required minlength="6" placeholder="새 비밀번호 입력">
+            </div>
+            <div class="form-group">
+              <label>새 비밀번호 확인</label>
+              <input type="password" id="pw-confirm" required minlength="6" placeholder="새 비밀번호 다시 입력">
+            </div>
+            <p id="pw-error" class="error-text hidden"></p>
+            <button type="submit" class="btn btn-primary btn-full" style="margin-top:8px;">비밀번호 변경</button>
+          </form>
+        </div>
+      </main>
+    </div>
+
+    <!-- 시간 외 퇴근 사유 입력 모달 -->
+    <div class="modal-overlay" id="modal-checkout-note">
+      <div class="modal" style="max-width:400px;">
+        <h3>예정 시간 외 퇴근</h3>
+        <p id="checkout-note-warning" style="margin-bottom:14px;color:var(--danger);font-size:14px;line-height:1.5;"></p>
+        <div class="form-group">
+          <label>퇴근 사유 * (관리자에게 전달됩니다)</label>
+          <textarea id="checkout-note-text" rows="4" maxlength="500" placeholder="예: 개인 사유로 조퇴, 컨디션 난조 등" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;"></textarea>
+          <p style="font-size:11px;color:var(--text-light);margin-top:6px;">※ 작성 후 본인은 조회만 가능하며, 수정·삭제는 불가합니다.</p>
+        </div>
+        <div class="modal-actions" style="display:flex;gap:8px;">
+          <button type="button" class="btn btn-outline" id="btn-cancel-checkout-note" style="flex:1;">취소</button>
+          <button type="button" class="btn btn-primary" id="btn-confirm-checkout-note" style="flex:1;">사유 제출 후 퇴근</button>
+        </div>
       </div>
+    </div>
+
+    <!-- 직원 근무표 스크린 (본인 일정만 조회) -->
+    <div id="schedule-screen" class="screen">
+      <header class="app-header">
+        <div class="header-left">
+          <button class="btn btn-sm btn-outline" id="btn-back-from-schedule">← 돌아가기</button>
+        </div>
+        <div class="header-right">
+          <span class="branch-badge">내 근무표</span>
+        </div>
+      </header>
+
+      <main class="main-content">
+        <div class="schedule-toolbar" style="margin-bottom:12px;">
+          <div class="schedule-nav">
+            <button class="btn btn-outline btn-sm" id="btn-myschd-prev">◀</button>
+            <button class="btn btn-outline btn-sm" id="btn-myschd-today">오늘</button>
+            <button class="btn btn-outline btn-sm" id="btn-myschd-next">▶</button>
+          </div>
+          <div class="schedule-view-switch">
+            <button class="btn btn-outline btn-sm view-btn" data-myview="month">월</button>
+            <button class="btn btn-outline btn-sm view-btn" data-myview="week">주</button>
+            <button class="btn btn-outline btn-sm view-btn active" data-myview="day">일</button>
+          </div>
+        </div>
+        <div id="myschd-title" style="font-size:16px;font-weight:700;text-align:center;margin-bottom:12px;color:var(--primary-dark);"></div>
+        <div id="myschd-calendar" class="schedule-calendar"></div>
+      </main>
     </div>
   </div>
 

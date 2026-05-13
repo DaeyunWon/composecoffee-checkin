@@ -85,6 +85,8 @@
 
       token = data.token;
       localStorage.setItem('cc_admin_token', token);
+      // 직원 페이지에서도 같은 토큰으로 사용 가능하도록 함께 저장
+      localStorage.setItem('cc_token', token);
       adminUser = data.user;
       errEl.classList.add('hidden');
       showAdminApp();
@@ -97,8 +99,11 @@
   $('#admin-logout').addEventListener('click', () => {
     token = null;
     adminUser = null;
+    // 두 토큰 모두 제거 (직원 페이지 자동 로그인 방지)
     localStorage.removeItem('cc_admin_token');
-    location.reload();
+    localStorage.removeItem('cc_token');
+    // 로그아웃 후에는 루트(직원 로그인 화면)로 이동
+    window.location.href = '/';
   });
 
   // ==================== 네비게이션 ====================
@@ -117,6 +122,7 @@
         case 'dashboard': loadDashboard(); break;
         case 'branches': loadBranches(); break;
         case 'users': loadUsers(); break;
+        case 'schedule': loadSchedule(); break;
         case 'daily': loadDaily(); break;
         case 'monthly': break;
         case 'qrcode': break;
@@ -172,9 +178,10 @@
         <tr>
           <td>${r.branch_name}${dispatchTag}</td>
           <td>${r.name}</td>
+          <td>${statusBadge(r.status)}</td>
           <td>${formatTime(r.check_in_time)}</td>
           <td>${formatTime(r.check_out_time)}</td>
-          <td>${statusBadge(r.status)}</td>
+          <td>${r.workHours}</td>
         </tr>`;
       }).join('');
     } catch (err) {
@@ -423,9 +430,9 @@
       const tbody = $('#users-table tbody');
       tbody.innerHTML = data.users.map(u => `
         <tr>
+          <td>${u.branch_name}</td>
           <td><strong>${u.name}</strong></td>
           <td>${u.login_id}</td>
-          <td>${u.branch_name}</td>
           <td><span class="badge ${u.role === 'admin' ? 'badge-warning' : 'badge-info'}">${u.role === 'admin' ? '관리자' : '직원'}</span></td>
           <td><span class="badge ${u.is_active ? 'badge-success' : 'badge-danger'}">${u.is_active ? '활성' : '비활성'}</span></td>
           <td>
@@ -568,15 +575,25 @@
         const dispatchTag = r.isDispatch && r.workBranchName
           ? ` <span style="color:#E65100;font-size:11px;">(→${r.workBranchName})</span>`
           : '';
+        let noteCell = '-';
+        if (r.check_out_note || r.check_out_warning) {
+          const combined = [r.check_out_warning, r.check_out_note].filter(Boolean).join(' / ');
+          const safe = String(combined).replace(/"/g, '&quot;');
+          const preview = r.check_out_note
+            ? `📝 ${r.check_out_note.length > 14 ? r.check_out_note.slice(0, 14) + '…' : r.check_out_note}`
+            : '⚠️';
+          noteCell = `<span style="cursor:help;color:var(--primary-dark);font-weight:600;" title="${safe}">${preview}</span>`;
+        }
         return `
         <tr>
           <td>${r.branch_name}${dispatchTag}</td>
           <td>${r.name}</td>
+          <td>${statusBadge(r.status)}</td>
           <td>${formatTime(r.check_in_time)}</td>
           <td>${formatTime(r.check_out_time)}</td>
           <td>${r.workHours}</td>
           <td>${r.check_in_distance != null ? r.check_in_distance : '-'}</td>
-          <td>${statusBadge(r.status)}</td>
+          <td>${noteCell}</td>
         </tr>`;
       }).join('');
     } catch (err) {
@@ -638,10 +655,10 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `attendance_${year}${String(month).padStart(2, '0')}.csv`;
+      a.download = `attendance_${year}${String(month).padStart(2, '0')}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast('CSV 파일이 다운로드되었습니다.', 'success');
+      showToast('엑셀 파일이 다운로드되었습니다.', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -685,6 +702,702 @@
     printWin.print();
   };
 
+  // ==================== 근무표 (캘린더) ====================
+  // 상태: 현재 보고있는 기준 날짜 / 뷰 모드 / 캐시된 일정 / 필터된 지점
+  let calCursor = new Date();        // 현재 보고있는 날짜 (월/주/일의 기준)
+  let calView = 'day';               // 기본값: 일별 ('month' | 'week' | 'day')
+  let calSchedules = [];             // 현재 화면 범위 일정
+  let allUsers = [];                 // 직원 목록 캐시
+  let calBranchFilter = '';          // 선택된 지점 ID (빈 문자열 = 전체)
+
+  // 지점별 고유 색상 (id 기반, 본사 제외 지점들에 순서대로 부여)
+  const BRANCH_PALETTE = [
+    { bg: '#5D4037', border: '#3E2723' }, // 갈색
+    { bg: '#1565C0', border: '#0D47A1' }, // 파랑
+    { bg: '#2E7D32', border: '#1B5E20' }, // 녹색
+    { bg: '#FF8F00', border: '#E65100' }, // 주황
+    { bg: '#6A1B9A', border: '#4A148C' }, // 보라
+    { bg: '#C2185B', border: '#880E4F' }, // 핑크
+    { bg: '#00838F', border: '#006064' }  // 청록
+  ];
+  function branchColor(branchId) {
+    // 본사 제외한 지점들을 정렬해서 인덱스를 부여 → id 순서가 바뀌어도 색이 안정적
+    const sorted = branches.filter(b => b.name !== '본사').slice().sort((a, b) => a.id - b.id);
+    const idx = sorted.findIndex(b => b.id === branchId);
+    return BRANCH_PALETTE[(idx >= 0 ? idx : 0) % BRANCH_PALETTE.length];
+  }
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function ymd(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+
+  function startOfWeek(d) {
+    const r = new Date(d);
+    r.setHours(0, 0, 0, 0);
+    r.setDate(r.getDate() - r.getDay()); // 일요일 시작
+    return r;
+  }
+
+  function addDays(d, n) {
+    const r = new Date(d);
+    r.setDate(r.getDate() + n);
+    return r;
+  }
+
+  function getCalRange() {
+    // 현재 뷰의 [start, end) 범위 (end는 미포함)
+    if (calView === 'month') {
+      // 달력 전체 6주 표시
+      const first = new Date(calCursor.getFullYear(), calCursor.getMonth(), 1);
+      const start = startOfWeek(first);
+      const end = addDays(start, 42);
+      return { start, end };
+    }
+    if (calView === 'week') {
+      const start = startOfWeek(calCursor);
+      const end = addDays(start, 7);
+      return { start, end };
+    }
+    // day
+    const start = new Date(calCursor);
+    start.setHours(0, 0, 0, 0);
+    const end = addDays(start, 1);
+    return { start, end };
+  }
+
+  function calTitle() {
+    if (calView === 'month') {
+      return `${calCursor.getFullYear()}년 ${calCursor.getMonth() + 1}월`;
+    }
+    if (calView === 'week') {
+      const s = startOfWeek(calCursor);
+      const e = addDays(s, 6);
+      return `${s.getFullYear()}.${pad2(s.getMonth() + 1)}.${pad2(s.getDate())} ~ ${e.getFullYear()}.${pad2(e.getMonth() + 1)}.${pad2(e.getDate())}`;
+    }
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    return `${calCursor.getFullYear()}년 ${calCursor.getMonth() + 1}월 ${calCursor.getDate()}일 (${days[calCursor.getDay()]})`;
+  }
+
+  function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+
+  async function loadSchedule() {
+    try {
+      // 직원 데이터 (한 번만)
+      if (allUsers.length === 0) {
+        const r = await apiFetch('/admin/users');
+        allUsers = r.users.filter(u => u.is_active);
+      }
+      // 지점 데이터
+      if (branches.length === 0) {
+        const br = await apiFetch('/admin/branches');
+        branches = br.branches;
+        updateBranchSelectors();
+      }
+      // 항상 특정 지점이 선택되어 있어야 함. 빈값이거나 존재하지 않는 지점이면 첫 번째 실제 지점으로
+      const real = branches.filter(b => b.name !== '본사').slice().sort((a, b) => a.id - b.id);
+      const filterIsValid = calBranchFilter && real.some(b => String(b.id) === String(calBranchFilter));
+      if (!filterIsValid && real.length > 0) {
+        calBranchFilter = String(real[0].id);
+      }
+      renderBranchTabs();
+      await reloadCalSchedules();
+      renderCalendar();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  function renderBranchTabs() {
+    const real = branches.filter(b => b.name !== '본사').slice().sort((a, b) => a.id - b.id);
+    const tabs = $('#schedule-branch-tabs');
+    if (!tabs) return;
+    // '전체' 옵션 없이 등록된 실제 지점만 — 항상 하나는 선택되어 있어야 함
+    let html = '';
+    real.forEach(b => {
+      const c = branchColor(b.id);
+      const active = String(b.id) === String(calBranchFilter);
+      html += `<button class="branch-tab ${active ? 'active' : ''}" data-id="${b.id}" style="${active ? `background:${c.bg};color:#fff;border-color:${c.border};` : `color:${c.bg};border-color:${c.bg};`}">
+        <span class="branch-tab-dot" style="background:${c.bg};"></span>${escapeHtml(b.name)}
+      </button>`;
+    });
+    tabs.innerHTML = html;
+    tabs.querySelectorAll('.branch-tab').forEach(t => {
+      t.addEventListener('click', async () => {
+        calBranchFilter = t.dataset.id;
+        renderBranchTabs();
+        await reloadCalSchedules();
+        renderCalendar();
+      });
+    });
+  }
+
+  async function reloadCalSchedules() {
+    const { start, end } = getCalRange();
+    const query = `?start=${ymd(start)}&end=${ymd(end)}${calBranchFilter ? `&branchId=${calBranchFilter}` : ''}`;
+    const data = await apiFetch(`/admin/schedules${query}`);
+    calSchedules = data.schedules;
+  }
+
+  function schedulesByDate(dateStr) {
+    return calSchedules.filter(s => s.work_date === dateStr);
+  }
+
+  function renderCalendar() {
+    $('#schedule-title').textContent = calTitle();
+    // 뷰 버튼 active
+    $$('.view-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.view === calView);
+    });
+    const root = $('#schedule-calendar');
+    if (calView === 'month') root.innerHTML = renderMonth();
+    else if (calView === 'week') root.innerHTML = renderWeek();
+    else root.innerHTML = renderDay();
+    bindCalendarEvents();
+  }
+
+  function renderMonth() {
+    const { start } = getCalRange();
+    const headDays = ['일', '월', '화', '수', '목', '금', '토'];
+    let html = '<div class="cal-month">';
+    headDays.forEach((d, i) => {
+      const cls = i === 0 ? 'sun' : (i === 6 ? 'sat' : '');
+      html += `<div class="cal-head ${cls}">${d}</div>`;
+    });
+
+    const todayStr = ymd(new Date());
+    const curMonth = calCursor.getMonth();
+
+    for (let i = 0; i < 42; i++) {
+      const d = addDays(start, i);
+      const dateStr = ymd(d);
+      const dayOfWeek = d.getDay();
+      const otherMonth = d.getMonth() !== curMonth;
+      const isToday = dateStr === todayStr;
+      const events = schedulesByDate(dateStr);
+      const visible = events.slice(0, 3);
+      const more = events.length - visible.length;
+      const dayCls = dayOfWeek === 0 ? 'sun' : (dayOfWeek === 6 ? 'sat' : '');
+      html += `
+        <div class="cal-cell ${otherMonth ? 'other-month' : ''} ${isToday ? 'today' : ''} ${dayCls}" data-date="${dateStr}">
+          <div class="cal-date">${d.getDate()}</div>
+          <div class="cal-events">
+            ${visible.map(s => {
+              const c = branchColor(s.branch_id);
+              return `<div class="cal-event ios-style" data-id="${s.id}" title="[${escapeHtml(s.branch_name)}] ${escapeHtml(s.user_name)} ${s.start_time}~${s.end_time}">
+                <span class="ev-dot" style="background:${c.bg};"></span><span class="ev-name">${escapeHtml(s.user_name)}</span>
+              </div>`;
+            }).join('')}
+            ${more > 0 ? `<div class="cal-event-more">+${more}건</div>` : ''}
+          </div>
+        </div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+  // 구글 캘린더 스타일 주간 뷰: 왼쪽 시간 축 + 시간대별 절대 위치 이벤트
+  function renderWeek() {
+    const { start } = getCalRange();
+    const headDays = ['일', '월', '화', '수', '목', '금', '토'];
+    const todayStr = ymd(new Date());
+    const startHour = 6;   // 06:00 부터
+    const endHour = 23;    // 23:00 까지
+    const hourPx = 44;
+    const totalHeight = (endHour - startHour + 1) * hourPx;
+
+    let html = '<div class="cal-week-grid">';
+
+    // 헤더: 시간 축 자리 + 7일 헤더
+    html += '<div class="cal-week-head"><div class="cal-week-time-head"></div>';
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(start, i);
+      const dow = d.getDay();
+      const isToday = ymd(d) === todayStr;
+      const cls = dow === 0 ? 'sun' : (dow === 6 ? 'sat' : '');
+      html += `<div class="cal-week-day-head ${cls} ${isToday ? 'today' : ''}">
+        <div class="dow">${headDays[dow]}</div>
+        <div class="day-num">${d.getDate()}</div>
+      </div>`;
+    }
+    html += '</div>';
+
+    // 본문: 시간 축 + 7일 칸
+    html += '<div class="cal-week-body" style="height:' + totalHeight + 'px;">';
+    // 시간 축
+    html += '<div class="cal-week-times">';
+    for (let h = startHour; h <= endHour; h++) {
+      const label = h === 0 ? '오전 12시' : (h < 12 ? '오전 ' + String(h).padStart(2, '0') + '시' : (h === 12 ? '오후 12시' : '오후 ' + String(h - 12).padStart(2, '0') + '시'));
+      html += `<div class="cal-week-time-slot" style="height:${hourPx}px;">${label}</div>`;
+    }
+    html += '</div>';
+
+    // 7일 칸
+    html += '<div class="cal-week-days">';
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(start, i);
+      const dateStr = ymd(d);
+      const events = schedulesByDate(dateStr).slice().sort((a, b) => a.start_time.localeCompare(b.start_time));
+      // 시간이 겹치는 이벤트는 가로로 분할
+      const layout = computeColumnLayout(events);
+      html += `<div class="cal-week-day" data-date="${dateStr}">`;
+      for (let h = 0; h <= endHour - startHour; h++) {
+        html += `<div class="cal-week-hour-line" style="top:${h * hourPx}px;"></div>`;
+      }
+      events.forEach(s => {
+        const [sh, sm] = s.start_time.split(':').map(Number);
+        const [eh, em] = s.end_time.split(':').map(Number);
+        const startMin = sh * 60 + sm;
+        const endMin = eh * 60 + em;
+        const baseMin = startHour * 60;
+        const visMin = startHour * 60;
+        const maxMin = (endHour + 1) * 60;
+        if (endMin <= visMin || startMin >= maxMin) return;
+        const topMin = Math.max(startMin, visMin) - baseMin;
+        const bottomMin = Math.min(endMin, maxMin) - baseMin;
+        const top = topMin * (hourPx / 60);
+        const height = Math.max(18, (bottomMin - topMin) * (hourPx / 60));
+        // 배경은 홈 지점 색으로 — 같은 시간대 다른 지점 직원이 자연스럽게 색으로 구분됨
+        const c = branchColor(s.user_home_branch_id || s.branch_id);
+        const homeName = s.user_home_branch_name || s.branch_name;
+        const isDispatch = s.user_home_branch_id != null && s.user_home_branch_id !== s.branch_id;
+        const lo = layout.get(s.id) || { col: 0, cols: 1 };
+        const widthPct = 100 / lo.cols;
+        const leftPct = lo.col * widthPct;
+        const titleStr = isDispatch
+          ? `[${s.user_home_branch_name}] ${s.user_name} (${s.branch_name} 파견) ${s.start_time}~${s.end_time}`
+          : `[${s.branch_name}] ${s.user_name} ${s.start_time}~${s.end_time}`;
+        html += `<div class="cal-week-event" data-id="${s.id}" style="top:${top}px;height:${height}px;left:calc(${leftPct}% + 1px);width:calc(${widthPct}% - 2px);background:${c.bg};border-color:${c.border};" title="${escapeHtml(titleStr)}">
+          <div class="ev-user-only">${escapeHtml(s.user_name)}</div>
+          ${isDispatch ? '<div class="dispatch-mini-block">파견</div>' : ''}
+        </div>`;
+      });
+      html += '</div>';
+    }
+    html += '</div>'; // .cal-week-days
+    html += '</div>'; // .cal-week-body
+    html += '</div>'; // .cal-week-grid
+    return html;
+  }
+
+  // 시간이 겹치는 이벤트들을 가로 컬럼으로 분배
+  // 반환: Map<id, {col, cols}> — col은 0-based 컬럼 인덱스, cols는 같은 겹침 그룹의 총 컬럼 수
+  function computeColumnLayout(events) {
+    const result = new Map();
+    if (!events || events.length === 0) return result;
+    const toMin = t => {
+      const [h, m] = t.split(':').map(Number);
+      return h * 60 + (m || 0);
+    };
+    // 정렬은 호출자가 이미 했다고 가정 (start_time 오름차순)
+    // 1단계: 연결된 겹침 그룹으로 묶기
+    const groups = [];
+    let cur = [];
+    let curEnd = -Infinity;
+    for (const ev of events) {
+      const s = toMin(ev.start_time);
+      const e = toMin(ev.end_time);
+      if (cur.length === 0 || s < curEnd) {
+        cur.push(ev);
+        curEnd = Math.max(curEnd, e);
+      } else {
+        groups.push(cur);
+        cur = [ev];
+        curEnd = e;
+      }
+    }
+    if (cur.length > 0) groups.push(cur);
+
+    // 2단계: 그룹 내에서 그리디 컬럼 배정
+    for (const group of groups) {
+      const colEnds = []; // colEnds[c] = 그 컬럼에 마지막으로 배정된 이벤트의 종료 분
+      for (const ev of group) {
+        const s = toMin(ev.start_time);
+        const e = toMin(ev.end_time);
+        let placed = -1;
+        for (let c = 0; c < colEnds.length; c++) {
+          if (colEnds[c] <= s) {
+            colEnds[c] = e;
+            placed = c;
+            break;
+          }
+        }
+        if (placed === -1) {
+          colEnds.push(e);
+          placed = colEnds.length - 1;
+        }
+        result.set(ev.id, { col: placed, cols: 0 });
+      }
+      // 그룹 전체에 대한 총 컬럼 수를 기록
+      const total = colEnds.length;
+      for (const ev of group) {
+        const r = result.get(ev.id);
+        if (r) r.cols = total;
+      }
+    }
+    return result;
+  }
+
+
+  // 일별 뷰: 주별 뷰와 같은 시간 축 그리드 (1일 컬럼)
+  function renderDay() {
+    const dateStr = ymd(calCursor);
+    const events = schedulesByDate(dateStr).slice().sort((a, b) => a.start_time.localeCompare(b.start_time));
+    const startHour = 6, endHour = 23, hourPx = 50;
+    const totalHeight = (endHour - startHour + 1) * hourPx;
+    const layout = computeColumnLayout(events);
+
+    let html = '<div class="cal-week-grid cal-day-grid">';
+    // 일별은 상단 nav에 '2026년 5월 13일 (수)' 가 이미 나오므로 헤더 행 생략
+
+    // 본문
+    html += '<div class="cal-week-body" style="height:' + totalHeight + 'px;">';
+    // 시간 축
+    html += '<div class="cal-week-times">';
+    for (let h = startHour; h <= endHour; h++) {
+      const label = h === 0 ? '오전 12시' : (h < 12 ? '오전 ' + String(h).padStart(2, '0') + '시' : (h === 12 ? '오후 12시' : '오후 ' + String(h - 12).padStart(2, '0') + '시'));
+      html += `<div class="cal-week-time-slot" style="height:${hourPx}px;">${label}</div>`;
+    }
+    html += '</div>';
+
+    // 단일 일자 칸
+    html += '<div class="cal-week-days cal-day-single">';
+    html += `<div class="cal-week-day" data-date="${dateStr}">`;
+    for (let h = 0; h <= endHour - startHour; h++) {
+      html += `<div class="cal-week-hour-line" style="top:${h * hourPx}px;"></div>`;
+    }
+    events.forEach(s => {
+      const [sh, sm] = s.start_time.split(':').map(Number);
+      const [eh, em] = s.end_time.split(':').map(Number);
+      const startMin = sh * 60 + sm;
+      const endMin = eh * 60 + em;
+      const baseMin = startHour * 60;
+      const visMin = startHour * 60;
+      const maxMin = (endHour + 1) * 60;
+      if (endMin <= visMin || startMin >= maxMin) return;
+      const topMin = Math.max(startMin, visMin) - baseMin;
+      const bottomMin = Math.min(endMin, maxMin) - baseMin;
+      const top = topMin * (hourPx / 60);
+      const height = Math.max(28, (bottomMin - topMin) * (hourPx / 60));
+      // 배경은 주별 뷰와 동일하게 홈(소속) 지점 색 — 파견 직원이 자연스럽게 색으로 구분됨
+      const c = branchColor(s.user_home_branch_id || s.branch_id);
+      const homeName = s.user_home_branch_name || s.branch_name;
+      const isDispatch = s.user_home_branch_id != null && s.user_home_branch_id !== s.branch_id;
+      const lo = layout.get(s.id) || { col: 0, cols: 1 };
+      const widthPct = 100 / lo.cols;
+      const leftPct = lo.col * widthPct;
+      const titleStr = isDispatch
+        ? `[${s.user_home_branch_name}] ${s.user_name} (${s.branch_name} 파견) ${s.start_time}~${s.end_time}`
+        : `[${s.branch_name}] ${s.user_name} ${s.start_time}~${s.end_time}`;
+      html += `<div class="cal-week-event" data-id="${s.id}" style="top:${top}px;height:${height}px;left:calc(${leftPct}% + 1px);width:calc(${widthPct}% - 2px);background:${c.bg};border-color:${c.border};" title="${escapeHtml(titleStr)}">
+        <div class="ev-time">${s.start_time}~${s.end_time}${isDispatch ? ' <span class="dispatch-mini">파견</span>' : ''}</div>
+        <div class="ev-user">[${escapeHtml(homeName)}] ${escapeHtml(s.user_name)}</div>
+        ${s.note ? `<div class="ev-note-line">${escapeHtml(s.note)}</div>` : ''}
+      </div>`;
+    });
+    html += '</div>'; // .cal-week-day
+    html += '</div>'; // .cal-week-days
+    html += '</div>'; // .cal-week-body
+    html += '</div>'; // .cal-week-grid
+    return html;
+  }
+
+  function bindCalendarEvents() {
+    // 월간 셀 클릭 → 해당 날짜 일정 보기 모달
+    $$('#schedule-calendar .cal-cell').forEach(cell => {
+      cell.addEventListener('click', (e) => {
+        if (e.target.closest('.cal-event')) return;
+        openDayModal(cell.dataset.date);
+      });
+    });
+    // 월간 이벤트 클릭 → 수정
+    $$('#schedule-calendar .cal-event').forEach(ev => {
+      ev.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openScheduleEdit(parseInt(ev.dataset.id));
+      });
+    });
+    // 주간 이벤트 클릭 → 수정
+    $$('#schedule-calendar .cal-week-event').forEach(ev => {
+      ev.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openScheduleEdit(parseInt(ev.dataset.id));
+      });
+    });
+    // 주간 빈 칸 클릭 → 해당 날짜에 일정 추가
+    $$('#schedule-calendar .cal-week-day').forEach(col => {
+      col.addEventListener('click', (e) => {
+        if (e.target.closest('.cal-week-event')) return;
+        openScheduleAdd(col.dataset.date);
+      });
+    });
+    // 일 뷰 이벤트
+    $$('#schedule-calendar .cal-day-event').forEach(ev => {
+      ev.addEventListener('click', () => openScheduleEdit(parseInt(ev.dataset.id)));
+    });
+    const dayAddBtn = $('#btn-cal-day-add');
+    if (dayAddBtn) {
+      dayAddBtn.addEventListener('click', () => openScheduleAdd(ymd(calCursor)));
+    }
+  }
+
+  function openDayModal(dateStr) {
+    const events = schedulesByDate(dateStr).slice().sort((a, b) => a.start_time.localeCompare(b.start_time));
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    const dow = new Date(y, m - 1, d).getDay();
+    $('#modal-day-title').textContent = `${y}년 ${m}월 ${d}일 (${days[dow]}) - 근무 일정`;
+    const list = $('#modal-day-list');
+    if (events.length === 0) {
+      list.innerHTML = '<p style="text-align:center;color:var(--text-light);padding:20px;">이 날짜에는 등록된 일정이 없습니다.</p>';
+    } else {
+      list.innerHTML = events.map(s => {
+        const c = branchColor(s.branch_id);
+        const homeName = s.user_home_branch_name || s.branch_name;
+        const isDispatch = s.user_home_branch_id != null && s.user_home_branch_id !== s.branch_id;
+        const homeColor = branchColor(s.user_home_branch_id || s.branch_id);
+        return `
+        <div class="day-schedule-item" data-id="${s.id}" style="border-left:4px solid ${c.bg};">
+          <div class="ds-info">
+            <span class="ds-name">
+              <span class="ev-branch-tag" style="color:${homeColor.bg};">[${escapeHtml(homeName)}]</span>
+              ${escapeHtml(s.user_name)}
+              ${isDispatch ? `<span class="dispatch-badge" title="${escapeHtml(s.branch_name)}으로 파견">파견 → ${escapeHtml(s.branch_name)}</span>` : ''}
+            </span>
+            <span class="ds-time">${s.start_time} ~ ${s.end_time}</span>
+            ${s.note ? `<span class="ds-branch">${escapeHtml(s.note)}</span>` : ''}
+          </div>
+          <button class="btn btn-outline btn-sm">수정</button>
+        </div>`;
+      }).join('');
+      list.querySelectorAll('.day-schedule-item').forEach(it => {
+        it.addEventListener('click', () => {
+          $('#modal-day-schedules').classList.remove('active');
+          openScheduleEdit(parseInt(it.dataset.id));
+        });
+      });
+    }
+    $('#btn-day-add').onclick = () => {
+      $('#modal-day-schedules').classList.remove('active');
+      openScheduleAdd(dateStr);
+    };
+    $('#modal-day-schedules').classList.add('active');
+  }
+
+  // 직원 드롭다운: '현재 지점 직원' optgroup + '다른 지점 직원' optgroup
+  // currentBranchId: 일정 모달의 '근무 지점' 셀렉트에서 선택된 지점 id (없으면 calBranchFilter fallback)
+  function fillUserSelect(currentBranchId) {
+    const sel = $('#schedule-user');
+    const targetBid = currentBranchId != null
+      ? parseInt(currentBranchId)
+      : (calBranchFilter ? parseInt(calBranchFilter) : null);
+
+    let html = '<option value="">선택</option>';
+
+    if (targetBid != null) {
+      const inBranch = allUsers.filter(u => u.branch_id === targetBid);
+      const others = allUsers.filter(u => u.branch_id !== targetBid);
+      const branchName = (branches.find(b => b.id === targetBid) || {}).name || '현재 지점';
+
+      if (inBranch.length > 0) {
+        html += `<optgroup label="${escapeHtml(branchName)} 직원">`;
+        inBranch.sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(u => {
+          html += `<option value="${u.id}">${escapeHtml(u.name)}</option>`;
+        });
+        html += `</optgroup>`;
+      }
+      if (others.length > 0) {
+        html += `<optgroup label="다른 지점 직원 (관리자/파견 포함)">`;
+        others.sort((a, b) => {
+          const bc = (a.branch_name || '').localeCompare(b.branch_name || '');
+          return bc !== 0 ? bc : (a.name || '').localeCompare(b.name || '');
+        }).forEach(u => {
+          html += `<option value="${u.id}">[${escapeHtml(u.branch_name)}] ${escapeHtml(u.name)}</option>`;
+        });
+        html += `</optgroup>`;
+      }
+    } else {
+      const sorted = allUsers.slice().sort((a, b) => {
+        const bc = (a.branch_name || '').localeCompare(b.branch_name || '');
+        return bc !== 0 ? bc : (a.name || '').localeCompare(b.name || '');
+      });
+      sorted.forEach(u => {
+        html += `<option value="${u.id}">[${escapeHtml(u.branch_name)}] ${escapeHtml(u.name)}</option>`;
+      });
+    }
+    sel.innerHTML = html;
+  }
+
+  // 일정 모달의 '근무 지점' 셀렉트 옵션 채우기 (본사 제외)
+  function fillScheduleBranchSelect(selectedId) {
+    const sel = $('#schedule-branch');
+    const real = branches.filter(b => b.name !== '본사').slice().sort((a, b) => a.id - b.id);
+    sel.innerHTML = real.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
+    // innerHTML 의 selected attribute 가 즉시 .value 에 반영되지 않는 경우를 대비해 명시적으로 설정
+    if (selectedId != null && real.find(b => String(b.id) === String(selectedId))) {
+      sel.value = String(selectedId);
+    } else if (real.length > 0) {
+      sel.value = String(real[0].id);
+    }
+  }
+
+  function openScheduleAdd(dateStr) {
+    // 기본 지점: 현재 탭 필터의 지점(없으면 첫 번째 실제 지점)
+    const real = branches.filter(b => b.name !== '본사').slice().sort((a, b) => a.id - b.id);
+    const defaultBid = calBranchFilter ? parseInt(calBranchFilter) : (real[0] ? real[0].id : null);
+    fillScheduleBranchSelect(defaultBid);
+    fillUserSelect(defaultBid);
+
+    $('#modal-schedule-title').textContent = '근무 일정 추가';
+    $('#schedule-edit-id').value = '';
+    $('#schedule-user').value = '';
+    $('#schedule-user').disabled = false;
+    $('#schedule-date').value = dateStr || ymd(new Date());
+    $('#schedule-start').value = '09:00';
+    $('#schedule-end').value = '18:00';
+    $('#schedule-note').value = '';
+    $('#btn-delete-schedule').style.display = 'none';
+    $('#modal-schedule').classList.add('active');
+  }
+
+  function openScheduleEdit(id) {
+    const s = calSchedules.find(x => x.id === id);
+    if (!s) return;
+    fillScheduleBranchSelect(s.branch_id);
+    fillUserSelect(s.branch_id);
+
+    $('#modal-schedule-title').textContent = '근무 일정 수정';
+    $('#schedule-edit-id').value = id;
+    $('#schedule-user').value = s.user_id;
+    $('#schedule-user').disabled = false;
+    $('#schedule-date').value = s.work_date;
+    $('#schedule-start').value = s.start_time;
+    $('#schedule-end').value = s.end_time;
+    $('#schedule-note').value = s.note || '';
+    $('#btn-delete-schedule').style.display = 'inline-block';
+    $('#modal-schedule').classList.add('active');
+  }
+
+  // 모달 바깥 클릭 닫기
+  $('#modal-schedule').addEventListener('click', (e) => {
+    if (e.target === $('#modal-schedule')) $('#modal-schedule').classList.remove('active');
+  });
+  $('#modal-day-schedules').addEventListener('click', (e) => {
+    if (e.target === $('#modal-day-schedules')) $('#modal-day-schedules').classList.remove('active');
+  });
+
+  // 일정 모달의 지점 셀렉트 변경 시 직원 목록 갱신
+  $('#schedule-branch').addEventListener('change', () => {
+    const bid = $('#schedule-branch').value;
+    const currentUser = $('#schedule-user').value;
+    fillUserSelect(bid);
+    // 직전 선택한 직원이 새 목록에도 있으면 유지
+    if (currentUser && $('#schedule-user').querySelector(`option[value="${currentUser}"]`)) {
+      $('#schedule-user').value = currentUser;
+    }
+  });
+
+  // 일정 저장
+  $('#form-schedule').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const editId = $('#schedule-edit-id').value;
+    const branchVal = $('#schedule-branch').value;
+    const parsedBranch = parseInt(branchVal);
+    const payload = {
+      userId: $('#schedule-user').value,
+      branchId: Number.isFinite(parsedBranch) ? parsedBranch : null,
+      workDate: $('#schedule-date').value,
+      startTime: $('#schedule-start').value,
+      endTime: $('#schedule-end').value,
+      note: $('#schedule-note').value.trim()
+    };
+    if (!payload.userId) { showToast('직원을 선택해주세요.', 'error'); return; }
+    if (!payload.branchId || !Number.isFinite(payload.branchId)) {
+      showToast('근무 지점을 선택해주세요.', 'error'); return;
+    }
+
+    try {
+      let resp;
+      if (editId) {
+        resp = await apiFetch(`/admin/schedules/${editId}`, { method: 'PUT', body: JSON.stringify(payload) });
+        showToast('근무 일정이 수정되었습니다.', 'success');
+      } else {
+        resp = await apiFetch('/admin/schedules', { method: 'POST', body: JSON.stringify(payload) });
+        showToast('근무 일정이 등록되었습니다.', 'success');
+      }
+      // 시간 겹침 경고 안내
+      if (resp && resp.warning) {
+        setTimeout(() => showToast('⚠️ ' + resp.warning, 'info'), 600);
+      }
+      $('#modal-schedule').classList.remove('active');
+      await reloadCalSchedules();
+      renderCalendar();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  // 일정 삭제
+  $('#btn-delete-schedule').addEventListener('click', async () => {
+    const editId = $('#schedule-edit-id').value;
+    if (!editId) return;
+    if (!confirm('이 근무 일정을 삭제하시겠습니까?')) return;
+    try {
+      await apiFetch(`/admin/schedules/${editId}`, { method: 'DELETE' });
+      showToast('근무 일정이 삭제되었습니다.', 'success');
+      $('#modal-schedule').classList.remove('active');
+      await reloadCalSchedules();
+      renderCalendar();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  // 캘린더 컨트롤
+  $('#btn-cal-prev').addEventListener('click', async () => {
+    if (calView === 'month') calCursor.setMonth(calCursor.getMonth() - 1);
+    else if (calView === 'week') calCursor = addDays(calCursor, -7);
+    else calCursor = addDays(calCursor, -1);
+    await reloadCalSchedules();
+    renderCalendar();
+  });
+
+  $('#btn-cal-next').addEventListener('click', async () => {
+    if (calView === 'month') calCursor.setMonth(calCursor.getMonth() + 1);
+    else if (calView === 'week') calCursor = addDays(calCursor, 7);
+    else calCursor = addDays(calCursor, 1);
+    await reloadCalSchedules();
+    renderCalendar();
+  });
+
+  $('#btn-cal-today').addEventListener('click', async () => {
+    calCursor = new Date();
+    await reloadCalSchedules();
+    renderCalendar();
+  });
+
+  $$('.view-btn').forEach(b => {
+    b.addEventListener('click', async () => {
+      calView = b.dataset.view;
+      await reloadCalSchedules();
+      renderCalendar();
+    });
+  });
+
+  $('#btn-add-schedule').addEventListener('click', () => {
+    if (allUsers.length === 0) {
+      apiFetch('/admin/users').then(r => {
+        allUsers = r.users.filter(u => u.is_active);
+        openScheduleAdd();
+      });
+    } else {
+      openScheduleAdd();
+    }
+  });
+
   // ==================== 초기화 ====================
   async function showAdminApp() {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -723,3 +1436,4 @@
 
   init();
 })();
+// EOF

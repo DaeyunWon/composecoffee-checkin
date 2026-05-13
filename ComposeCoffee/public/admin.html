@@ -50,11 +50,13 @@
           <li><a href="#" data-section="dashboard" class="active">📊 대시보드</a></li>
           <li><a href="#" data-section="branches">🏪 지점 관리</a></li>
           <li><a href="#" data-section="users">👥 직원 관리</a></li>
+          <li><a href="#" data-section="schedule">🗓️ 근무표</a></li>
           <li><a href="#" data-section="daily">📋 일별 현황</a></li>
           <li><a href="#" data-section="monthly">📈 월별 리포트</a></li>
           <li><a href="#" data-section="qrcode">📱 QR코드</a></li>
         </ul>
-        <div style="padding: 20px; margin-top: auto;">
+        <div style="padding: 20px; margin-top: auto; display:flex; flex-direction:column; gap:8px;">
+          <a class="btn btn-outline btn-full btn-sm" href="/?stay=1" style="text-decoration:none; text-align:center;">← 출퇴근 화면</a>
           <button class="btn btn-outline btn-full btn-sm" id="admin-logout">로그아웃</button>
         </div>
       </aside>
@@ -72,7 +74,7 @@
           <div class="data-table-wrapper">
           <table class="data-table" id="dashboard-table">
             <thead>
-              <tr><th>지점</th><th>이름</th><th>출근</th><th>퇴근</th><th>상태</th></tr>
+              <tr><th>지점</th><th>이름</th><th>상태</th><th>출근</th><th>퇴근</th><th>총 근무시간</th></tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -107,11 +109,39 @@
           <div class="data-table-wrapper">
           <table class="data-table" id="users-table">
             <thead>
-              <tr><th>이름</th><th>로그인 ID</th><th>지점</th><th>역할</th><th>상태</th><th>관리</th></tr>
+              <tr><th>지점</th><th>이름</th><th>로그인 ID</th><th>역할</th><th>상태</th><th>관리</th></tr>
             </thead>
             <tbody></tbody>
           </table>
           </div>
+        </section>
+
+        <!-- 근무표 -->
+        <section id="sec-schedule" class="admin-section" style="display:none;">
+          <div class="admin-header">
+            <h2>근무표</h2>
+          </div>
+          <!-- 지점 탭을 최상단에 (지점별 필터링 + 색상 구분) -->
+          <div id="schedule-branch-tabs" class="branch-tabs"></div>
+          <!-- 뷰 토글(좌) + 일정 추가(우) 한 행 -->
+          <div class="schedule-actions">
+            <div class="schedule-view-switch">
+              <button class="btn btn-outline btn-sm view-btn" data-view="month">월</button>
+              <button class="btn btn-outline btn-sm view-btn" data-view="week">주</button>
+              <button class="btn btn-outline btn-sm view-btn active" data-view="day">일</button>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-add-schedule">+ 근무 일정 추가</button>
+          </div>
+          <!-- 네비게이션 + 제목 한 행 -->
+          <div class="schedule-toolbar">
+            <div class="schedule-nav">
+              <button class="btn btn-outline btn-sm" id="btn-cal-prev">◀</button>
+              <button class="btn btn-outline btn-sm" id="btn-cal-today">오늘</button>
+              <button class="btn btn-outline btn-sm" id="btn-cal-next">▶</button>
+              <span class="schedule-title" id="schedule-title"></span>
+            </div>
+          </div>
+          <div id="schedule-calendar" class="schedule-calendar"></div>
         </section>
 
         <!-- 일별 현황 -->
@@ -126,7 +156,7 @@
           <div class="data-table-wrapper">
           <table class="data-table" id="daily-table">
             <thead>
-              <tr><th>지점</th><th>이름</th><th>출근</th><th>퇴근</th><th>근무시간</th><th>거리(m)</th><th>상태</th></tr>
+              <tr><th>지점</th><th>이름</th><th>상태</th><th>출근</th><th>퇴근</th><th>근무시간</th><th>거리(m)</th><th>사유</th></tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -137,7 +167,7 @@
         <section id="sec-monthly" class="admin-section" style="display:none;">
           <div class="admin-header">
             <h2>월별 근무 리포트</h2>
-            <button class="btn btn-outline btn-sm" id="btn-export-csv">📥 CSV 다운로드</button>
+            <button class="btn btn-outline btn-sm" id="btn-export-csv">📥 엑셀 다운로드</button>
           </div>
           <div class="filter-bar">
             <select id="filter-monthly-year"></select>
@@ -243,22 +273,86 @@
           <label>전화번호</label>
           <input type="tel" id="user-phone" placeholder="010-1234-5678">
         </div>
-        <div class="form-group">
-          <label>소속 지점 *</label>
-          <select id="user-branch" required></select>
-        </div>
-        <div class="form-group">
-          <label>역할</label>
-          <select id="user-role">
-            <option value="staff">직원</option>
-            <option value="admin">관리자</option>
-          </select>
+        <div style="display:flex;gap:12px;">
+          <div class="form-group" style="flex:1;min-width:0;">
+            <label>소속 지점 *</label>
+            <select id="user-branch" required style="width:100%;"></select>
+          </div>
+          <div class="form-group" style="flex:1;min-width:0;">
+            <label>역할</label>
+            <select id="user-role" style="width:100%;">
+              <option value="staff">직원</option>
+              <option value="admin">관리자</option>
+            </select>
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-user').classList.remove('active')">취소</button>
           <button type="submit" class="btn btn-primary">저장</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- 근무 일정 추가/수정 모달 -->
+  <div class="modal-overlay" id="modal-schedule">
+    <div class="modal" style="max-width:480px;">
+      <h3 id="modal-schedule-title">근무 일정 추가</h3>
+      <form id="form-schedule">
+        <input type="hidden" id="schedule-edit-id">
+        <div style="display:flex;gap:12px;">
+          <div class="form-group" style="flex:1;min-width:0;">
+            <label>근무 지점 *</label>
+            <select id="schedule-branch" required style="width:100%;"></select>
+          </div>
+          <div class="form-group" style="flex:1;min-width:0;">
+            <label>근무 직원 *</label>
+            <select id="schedule-user" required style="width:100%;"></select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>근무 날짜 *</label>
+          <input type="date" id="schedule-date" required>
+        </div>
+        <div style="display:flex;gap:12px;">
+          <div class="form-group" style="flex:1;">
+            <label>시작 시간 *</label>
+            <input type="time" id="schedule-start" required>
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>종료 시간 *</label>
+            <input type="time" id="schedule-end" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>메모</label>
+          <input type="text" id="schedule-note" placeholder="예: 오픈 담당">
+        </div>
+        <p style="font-size:12px;color:var(--text-light);margin-top:-4px;margin-bottom:12px;">
+          ※ 같은 직원·같은 날·같은 시작시각만 중복 방지됩니다.<br>
+          ※ 하루에 다른 지점·시간대로 여러 일정 등록 가능 (오전 A지점, 오후 B지점 등).<br>
+          ※ 출퇴근은 등록된 시간 ±30분 범위에서 권장됩니다.
+        </p>
+        <div class="modal-actions" style="justify-content:space-between;">
+          <button type="button" class="btn btn-outline" style="color:var(--danger);border-color:var(--danger);" id="btn-delete-schedule">삭제</button>
+          <div style="display:flex;gap:12px;">
+            <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-schedule').classList.remove('active')">취소</button>
+            <button type="submit" class="btn btn-primary">저장</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 날짜 클릭 시 해당 일자 일정 보기 모달 -->
+  <div class="modal-overlay" id="modal-day-schedules">
+    <div class="modal" style="max-width:520px;">
+      <h3 id="modal-day-title">날짜별 일정</h3>
+      <div id="modal-day-list" style="margin-bottom:16px;"></div>
+      <div class="modal-actions" style="justify-content:space-between;">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-day-add">+ 이 날짜에 추가</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-day-schedules').classList.remove('active')">닫기</button>
+      </div>
     </div>
   </div>
 

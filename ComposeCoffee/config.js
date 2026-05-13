@@ -1,7 +1,7 @@
 // ComposeCoffee 출퇴근 관리 시스템 설정
 module.exports = {
   // 서버 설정
-  PORT: process.env.PORT || 3000,
+  PORT: process.env.PORT || 3001,
   HOST: process.env.HOST || '0.0.0.0',
 
   // JWT 비밀 키 (운영 시 반드시 환경변수로 변경)

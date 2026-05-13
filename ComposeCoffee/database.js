@@ -3,39 +3,28 @@ const path = require('path');
 const fs = require('fs');
 const config = require('./config');
 
-// data 디렉토리 생성
 const dbDir = path.dirname(config.DB_PATH);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
+if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
 let db = null;
 
-// DB를 파일로 저장
 function saveDb() {
   if (db) {
     const data = db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(config.DB_PATH, buffer);
+    fs.writeFileSync(config.DB_PATH, Buffer.from(data));
   }
 }
-
-// 주기적 자동 저장 (30초)
 setInterval(saveDb, 30000);
 
-// sql.js wrapper - better-sqlite3와 유사한 인터페이스 제공
 class DbWrapper {
-  constructor(sqlDb) {
-    this.db = sqlDb;
-  }
-
+  constructor(sqlDb) { this.db = sqlDb; }
   prepare(sql) {
     const self = this;
     return {
       run(...params) {
         self.db.run(sql, params);
-        saveDb();
         const lastId = self.db.exec('SELECT last_insert_rowid() as id')[0];
+        saveDb();
         return { lastInsertRowid: lastId ? lastId.values[0][0] : 0 };
       },
       get(...params) {
@@ -68,112 +57,61 @@ class DbWrapper {
       }
     };
   }
-
-  exec(sql) {
-    this.db.run(sql);
-    saveDb();
-  }
-
-  pragma(sql) {
-    this.db.run(`PRAGMA ${sql}`);
-  }
-
+  exec(sql) { this.db.run(sql); saveDb(); }
+  pragma(sql) { this.db.run('PRAGMA ' + sql); }
   transaction(fn) {
     return (...args) => {
       this.db.run('BEGIN TRANSACTION');
-      try {
-        const result = fn(...args);
-        this.db.run('COMMIT');
-        saveDb();
-        return result;
-      } catch (err) {
-        this.db.run('ROLLBACK');
-        throw err;
-      }
+      try { const r = fn(...args); this.db.run('COMMIT'); saveDb(); return r; }
+      catch (e) { this.db.run('ROLLBACK'); throw e; }
     };
   }
 }
 
 async function initDatabase() {
   const SQL = await initSqlJs();
-
-  // 기존 DB 파일이 있으면 로드
   if (fs.existsSync(config.DB_PATH)) {
     const buffer = fs.readFileSync(config.DB_PATH);
     db = new SQL.Database(buffer);
   } else {
     db = new SQL.Database();
   }
-
   const wrapper = new DbWrapper(db);
-
   wrapper.pragma('journal_mode = WAL');
   wrapper.pragma('foreign_keys = ON');
 
-  // 테이블 생성
-  db.run(`
-    CREATE TABLE IF NOT EXISTS branches (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      address TEXT,
-      latitude REAL NOT NULL,
-      longitude REAL NOT NULL,
-      radius_meters INTEGER DEFAULT ${config.DEFAULT_RADIUS_METERS},
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
+  db.run('CREATE TABLE IF NOT EXISTS branches (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, address TEXT, latitude REAL NOT NULL, longitude REAL NOT NULL, radius_meters INTEGER DEFAULT ' + config.DEFAULT_RADIUS_METERS + ', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+  db.run("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, login_id TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, name TEXT NOT NULL, phone TEXT, role TEXT NOT NULL DEFAULT 'staff' CHECK(role IN ('admin', 'staff')), branch_id INTEGER NOT NULL, is_active INTEGER DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (branch_id) REFERENCES branches(id))");
+  db.run("CREATE TABLE IF NOT EXISTS attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, branch_id INTEGER NOT NULL, check_type TEXT NOT NULL CHECK(check_type IN ('in', 'out')), check_time DATETIME DEFAULT CURRENT_TIMESTAMP, latitude REAL, longitude REAL, distance_meters REAL, is_valid_location INTEGER DEFAULT 1, note TEXT, user_note TEXT, FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (branch_id) REFERENCES branches(id))");
+  try { db.run('ALTER TABLE attendance ADD COLUMN user_note TEXT'); } catch (e) {}
 
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      login_id TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      name TEXT NOT NULL,
-      phone TEXT,
-      role TEXT NOT NULL DEFAULT 'staff' CHECK(role IN ('admin', 'staff')),
-      branch_id INTEGER NOT NULL,
-      is_active INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (branch_id) REFERENCES branches(id)
-    )
-  `);
+  db.run("CREATE TABLE IF NOT EXISTS schedules (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, branch_id INTEGER NOT NULL, work_date TEXT NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL, note TEXT, created_by TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, work_date, start_time), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (branch_id) REFERENCES branches(id))");
 
-  db.run(`
-    CREATE TABLE IF NOT EXISTS attendance (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id TEXT NOT NULL,
-      branch_id INTEGER NOT NULL,
-      check_type TEXT NOT NULL CHECK(check_type IN ('in', 'out')),
-      check_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-      latitude REAL,
-      longitude REAL,
-      distance_meters REAL,
-      is_valid_location INTEGER DEFAULT 1,
-      note TEXT,
-      FOREIGN KEY (user_id) REFERENCES users(id),
-      FOREIGN KEY (branch_id) REFERENCES branches(id)
-    )
-  `);
+  try {
+    const schemaRow = wrapper.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='schedules'").get();
+    if (schemaRow && schemaRow.sql && /UNIQUE\s*\(\s*user_id\s*,\s*work_date\s*\)/i.test(schemaRow.sql) && !/start_time/.test(schemaRow.sql.match(/UNIQUE[^)]+\)/i)[0])) {
+      db.run('ALTER TABLE schedules RENAME TO schedules_old_unique_date');
+      db.run("CREATE TABLE schedules (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, branch_id INTEGER NOT NULL, work_date TEXT NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL, note TEXT, created_by TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, work_date, start_time), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (branch_id) REFERENCES branches(id))");
+      db.run('INSERT INTO schedules SELECT * FROM schedules_old_unique_date');
+      db.run('DROP TABLE schedules_old_unique_date');
+    }
+  } catch (e) { console.warn('schedules migration:', e.message); }
 
-  // "본사" 지점 자동 생성 (관리자용, 출퇴근 불필요)
   const hq = wrapper.prepare("SELECT id FROM branches WHERE name = '본사'").get();
-  if (!hq) {
-    db.run("INSERT INTO branches (name, address, latitude, longitude, radius_meters) VALUES ('본사', '관리자 전용', 0, 0, 0)");
-  }
+  if (!hq) db.run("INSERT INTO branches (name, address, latitude, longitude, radius_meters) VALUES ('본사', '관리자 전용', 0, 0, 0)");
 
-  // 인덱스 (IF NOT EXISTS로 안전하게)
   db.run('CREATE INDEX IF NOT EXISTS idx_attendance_user_time ON attendance(user_id, check_time)');
   db.run('CREATE INDEX IF NOT EXISTS idx_attendance_branch_time ON attendance(branch_id, check_time)');
   db.run('CREATE INDEX IF NOT EXISTS idx_users_branch ON users(branch_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_users_login ON users(login_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_schedules_date ON schedules(work_date)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_schedules_user_date ON schedules(user_id, work_date)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_schedules_branch_date ON schedules(branch_id, work_date)');
 
   saveDb();
-
   return wrapper;
 }
 
-// 프로세스 종료 시 저장
 process.on('exit', saveDb);
 process.on('SIGINT', () => { saveDb(); process.exit(); });
 process.on('SIGTERM', () => { saveDb(); process.exit(); });

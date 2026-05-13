@@ -23,6 +23,10 @@ async function seed() {
     'INSERT OR IGNORE INTO branches (name, address, latitude, longitude, radius_meters) VALUES (?, ?, ?, ?, ?)'
   ).run('홍대점', '서울시 마포구 서교동 456-78', 37.5563, 126.9236, 50);
 
+  db.prepare(
+    'INSERT OR IGNORE INTO branches (name, address, latitude, longitude, radius_meters) VALUES (?, ?, ?, ?, ?)'
+  ).run('신성점', '가정로, 신성동, 유성구, 대전광역시, 34120, 대한민국', 36.3849347, 127.3513388, 50);
+
   const branches = db.prepare('SELECT * FROM branches').all();
   branches.forEach(b => console.log(`  ✅ ${b.name} (ID: ${b.id}, 좌표: ${b.latitude}, ${b.longitude}, 반경: ${b.radius_meters}m)`));
 
